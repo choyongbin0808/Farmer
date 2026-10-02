@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FARMER - 3D 힐링 농사 RPG</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/hud.css">
+  <link rel="stylesheet" href="css/panels.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas"></canvas>
+    <div id="markers" class="hidden"></div>
+
+    <div id="hud" class="hidden">
+      <div id="hud-player" class="panel hud-box">
+        <div class="hud-row name">👤 <span id="hud-name"></span></div>
+        <div class="hud-row rank">🏅 <span id="hud-rank"></span></div>
+        <div class="hud-row money">💰 <span id="hud-money"></span>원</div>
+        <div class="stamina">
+          <span class="stamina-icon">⚡</span>
+          <div class="stamina-bar"><div id="stamina-fill"></div><div id="stamina-preview"></div></div>
+          <span id="stamina-text"></span>
+          <span id="set-badge"></span>
+          <div id="stamina-float-layer"></div>
+        </div>
+      </div>
+
+      <div id="hud-time" class="panel hud-box">
+        <div class="hud-row"><b id="hud-day"></b> <span id="hud-clock"></span></div>
+        <div class="hud-row" id="hud-weather"></div>
+      </div>
+      <div id="quest-tracker" class="panel hidden" title="클릭해서 퀘스트 목록 열기"></div>
+
+      <div id="hotbar-wrap">
+        <div id="held-name"></div>
+        <div id="hotbar"></div>
+      </div>
+
+      <div id="hud-buttons">
+        <button id="btn-menu" class="round-btn small" title="메뉴 (Esc)">⚙️</button>
+        <button id="btn-quest" class="round-btn" title="퀘스트 (Q)">📜<span>퀘스트</span></button>
+        <button id="btn-bag" class="round-btn" title="가방 (I)">🎒<span>가방</span></button>
+      </div>
+    </div>
+
+    <div id="edge-arrow" class="hidden"><span class="arr">➤</span><span class="lbl"></span></div>
+    <div id="toasts"></div>
+    <div id="banner"></div>
+
+    <div id="dialogue" class="hidden">
+      <div class="dlg-box panel">
+        <div class="dlg-avatar" id="dlg-avatar"></div>
+        <div class="dlg-main">
+          <div class="dlg-name" id="dlg-name"></div>
+          <div class="dlg-text" id="dlg-text"></div>
+          <div class="dlg-options" id="dlg-options"></div>
+          <div class="dlg-next hidden" id="dlg-next">▼ 클릭 / Space</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ending" class="hidden"></div>
+    <div id="title-screen" class="hidden"></div>
+    <div id="modal-root"></div>
+    <div id="fade"></div>
+    <div id="loading">🌱 초록마을로 가는 중…</div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
