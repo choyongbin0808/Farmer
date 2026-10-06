@@ -1,9 +1,9 @@
 import { G, formatMoney } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { getItem } from '../data/items.js';
-import { TOOL_LEVELS } from '../data/tools.js';
 import { WEATHERS } from '../world/Weather.js';
 import { StaminaSystem } from '../systems/StaminaSystem.js';
+import { GearSystem } from '../systems/GearSystem.js';
 import { OutfitSystem } from '../systems/OutfitSystem.js';
 import { RankSystem } from '../systems/RankSystem.js';
 import { TimeSystem } from '../systems/TimeSystem.js';
@@ -25,6 +25,8 @@ export function itemIconHTML(id) {
   const it = getItem(id);
   if (!it) return '';
   if (it.type === 'seed') return `<span class="ico">🌱<span class="sub-ico">${it.subIcon}</span></span>`;
+  // 도구는 장착한 장비 아이콘 (트랙터 🚜 등)
+  if (it.type === 'tool' && G.state) return `<span class="ico">${GearSystem.equipped(it.toolKind).icon}</span>`;
   return `<span class="ico">${it.icon}</span>`;
 }
 
@@ -33,9 +35,9 @@ export function slotHTML(slot) {
   const it = getItem(slot.id);
   let badge = '';
   if (it.type === 'tool') {
-    const lv = G.state.tools[it.toolKind];
-    const c = '#' + TOOL_LEVELS[lv].color.toString(16).padStart(6, '0');
-    badge = `<span class="lv" style="background:${c}">Lv${lv}</span>`;
+    const id = GearSystem.equippedId(it.toolKind);
+    const c = '#' + GearSystem.statsOf(id).color.toString(16).padStart(6, '0');
+    badge = `<span class="lv" style="background:${c}">+${GearSystem.enhanceOf(id)}</span>`;
   }
   const count = slot.n > 1 ? `<span class="cnt">${slot.n}</span>` : '';
   return itemIconHTML(slot.id) + badge + count;
@@ -57,7 +59,7 @@ export function initHUD(handlers) {
   $('btn-menu').addEventListener('click', handlers.openMenu);
   $('quest-tracker').addEventListener('click', handlers.openQuests);
 
-  for (const evt of ['inventory', 'held', 'upgrade']) EventBus.on(evt, renderHotbar);
+  for (const evt of ['inventory', 'held', 'gear']) EventBus.on(evt, renderHotbar);
   EventBus.on('quests', renderTracker);
   EventBus.on('staminaFloat', floatStamina);
 }
@@ -70,10 +72,11 @@ export function renderHotbar() {
     el.querySelector('.slot-inner').innerHTML = slotHTML(G.state.hotbar[i]);
     el.classList.toggle('selected', h?.area === 'hotbar' && h.index === i);
     const it = G.state.hotbar[i] && getItem(G.state.hotbar[i].id);
-    el.title = it ? it.name : '빈 칸';
+    el.title = it ? (it.type === 'tool' ? GearSystem.displayName(GearSystem.equippedId(it.toolKind)) : it.name) : '빈 칸';
   });
   const held = InventorySystem.getHeld();
-  $('held-name').textContent = held ? `${held.item.name}${held.area === 'inventory' ? ' (가방)' : ''}` : '';
+  const heldName = held ? (held.item.type === 'tool' ? GearSystem.displayName(GearSystem.equippedId(held.item.toolKind)) : held.item.name) : '';
+  $('held-name').textContent = held ? `${heldName}${held.area !== 'hotbar' ? ' (가방)' : ''}` : '';
 }
 
 export function renderTracker() {

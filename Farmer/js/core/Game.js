@@ -5,6 +5,13 @@ export const DAY_START = 6 * 60;
 export const DAY_END = 26 * 60; // 다음 날 02:00
 export const SLEEP_START = 18 * 60; // 이 시각(밤)부터 잠자기 가능
 export const GAME_MIN_PER_SEC = 2;
+/** 가방 칸: 탭(종류)마다 따로 — seed 씨앗, crop 작물, food 음식, misc 도구·특별 아이템 */
+export const BAG_AREAS = ['seed', 'crop', 'food', 'misc'];
+export const BAG_SIZE = 20;
+
+export function newBag() {
+  return Object.fromEntries(BAG_AREAS.map((a) => [a, Array(BAG_SIZE).fill(null)]));
+}
 
 export const G = {
   state: null,
@@ -34,7 +41,7 @@ export function createNewState(name) {
     ownedClothes: [],
     time: { day: 1, minutes: DAY_START, weather: 'sunny' },
     farm: { size: 3, grid: FARM_MAX, plots },
-    inventory: Array(20).fill(null),
+    bag: newBag(),
     hotbar: [
       { id: 'tool_hoe', n: 1 },
       { id: 'tool_can', n: 1 },
@@ -43,7 +50,12 @@ export function createNewState(name) {
       null,
     ],
     storage: {},
-    tools: { hoe: 1, can: 1, sickle: 1 },
+    // 농기구 장비: 종류별 장착 중인 장비 id, 보유 장비 목록, 장비별 강화 단계
+    gear: {
+      equipped: { hoe: 'tool_hoe_old', can: 'tool_can_old', sickle: 'tool_sickle_old' },
+      owned: ['tool_hoe_old', 'tool_can_old', 'tool_sickle_old'],
+      enhance: {},
+    },
     quests: { mainIndex: 0, main: null, subs: {}, tracked: null },
     relations: { grandma: 0, minji: 0, sua: 0, fisher: 0, smith: 0 },
     talkedToday: {},

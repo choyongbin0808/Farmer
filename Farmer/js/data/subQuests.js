@@ -64,14 +64,14 @@ export const SUB_QUESTS = [
     id: 'sub_smith_1', giver: 'smith', title: '첫 담금질', desc: '농기구 하나를 처음으로 강화하자.',
     offer: ['…도구를 강화해 본 적 있나?', '하나라도 강화해 와라. 그럼 인정해 주지.'],
     done: ['…좋은 눈이다. 이 두건 써라. 불똥 튀는 데선 필수다.'],
-    objectives: [{ kind: 'toolLevel', level: 2, count: 1 }],
+    objectives: [{ kind: 'enhance', level: 1, count: 1 }],
     rewards: { clothes: ['cloth_smith_hat'] },
   },
   {
-    id: 'sub_smith_2', giver: 'smith', title: '명장의 길', desc: '모든 농기구를 4단계 이상으로 강화하자.', req: { prev: 'sub_smith_1', hearts: 3 },
-    offer: ['모든 도구를 4단계까지 올려 봐라.', '해내면… 내 앞치마를 물려주지.'],
+    id: 'sub_smith_2', giver: 'smith', title: '명장의 길', desc: '장착한 모든 농기구를 +3 이상으로 강화하자.', req: { prev: 'sub_smith_1', hearts: 3 },
+    offer: ['쓰고 있는 도구를 전부 +3까지 올려 봐라.', '해내면… 내 앞치마를 물려주지.'],
     done: ['…넌 이제 진짜 농부다. 이 앞치마 가져가. 앞으로 강화 비용도 깎아 주마.'],
-    objectives: [{ kind: 'toolLevel', level: 4, count: 3 }],
+    objectives: [{ kind: 'enhance', level: 3, count: 3 }],
     rewards: { clothes: ['cloth_smith_top'], flags: ['discount'] },
   },
 ];

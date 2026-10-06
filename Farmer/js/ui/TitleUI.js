@@ -1,4 +1,5 @@
 import { AudioManager } from '../core/AudioManager.js';
+import { prologueComicHTML } from './PrologueComic.js';
 
 const $ = (id) => document.getElementById(id);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -11,7 +12,8 @@ const OPENING = [
 ];
 
 export const TitleUI = {
-  show({ hasSave, onNew, onContinue, onSettings }) {
+  show(opts) {
+    const { hasSave, onNew, onContinue, onSettings } = opts;
     const el = $('title-screen');
     el.classList.remove('hidden');
     el.innerHTML = `
@@ -29,8 +31,9 @@ export const TitleUI = {
     el.querySelector('[data-act="new"]').onclick = () => {
       AudioManager.resume();
       AudioManager.sfx('click');
-      if (hasSave && !confirm('저장된 게임이 있어요. 새로 시작하면 기존 기록이 지워져요. 계속할까요?')) return;
-      this.askName(onNew);
+      // 브라우저 confirm()은 막혀 있는 환경(앱 내장 브라우저 등)에서 바로 false가 돼 새 게임이 안 됐음 → 화면 안 확인 창
+      if (hasSave) this.confirmNew(opts);
+      else this.askName(onNew);
     };
     el.querySelector('[data-act="continue"]').onclick = () => {
       AudioManager.resume();
@@ -41,6 +44,27 @@ export const TitleUI = {
     el.querySelector('[data-act="settings"]').onclick = () => {
       AudioManager.resume();
       onSettings();
+    };
+  },
+
+  confirmNew(opts) {
+    const el = $('title-screen');
+    el.innerHTML = `
+      <div class="title-card name-card">
+        <h2>새 게임을 시작할까요?</h2>
+        <p class="confirm-msg">저장된 게임이 있어요.<br>새로 시작하면 기존 기록이 지워져요.</p>
+        <div class="title-buttons row">
+          <button class="btn primary big" data-act="yes">새로 시작</button>
+          <button class="btn big" data-act="no">돌아가기</button>
+        </div>
+      </div>`;
+    el.querySelector('[data-act="yes"]').onclick = () => {
+      AudioManager.sfx('click');
+      this.askName(opts.onNew);
+    };
+    el.querySelector('[data-act="no"]').onclick = () => {
+      AudioManager.sfx('click');
+      this.show(opts);
     };
   },
 
@@ -66,23 +90,36 @@ export const TitleUI = {
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
   },
 
+  /** 프롤로그 4컷 만화: 한 컷씩 나타나고(클릭 또는 잠시 후 다음 컷), 다 보면 출발 버튼 */
   async opening(name, onNew) {
     const el = $('title-screen');
-    el.innerHTML = `<div class="opening"><p id="opening-text"></p><small>클릭하면 넘어가요</small></div>`;
-    el.classList.add('dark');
-    const p = $('opening-text');
-    let skip = false;
-    el.onclick = () => { skip = true; };
-    for (const line of OPENING) {
-      p.classList.remove('show');
-      await wait(250);
-      p.textContent = line;
-      p.classList.add('show');
-      skip = false;
-      for (let t = 0; t < 2600 && !skip; t += 50) await wait(50);
+    el.innerHTML = prologueComicHTML(OPENING);
+    el.classList.add('comic-bg');
+    const cuts = [...el.querySelectorAll('.cut')];
+    let next = null;
+    let skipAll = false;
+    el.onclick = () => next?.();
+    el.querySelector('.comic-skip').onclick = (e) => {
+      e.stopPropagation();
+      skipAll = true;
+      next?.();
+    };
+    await wait(300);
+    for (const cut of cuts) {
+      if (skipAll) break;
+      cut.classList.add('show');
+      AudioManager.sfx('click');
+      await new Promise((r) => { next = r; setTimeout(r, 4200); });
+    }
+    if (!skipAll) {
+      el.querySelector('.comic-hint').classList.add('hidden');
+      const start = el.querySelector('.comic-start');
+      start.classList.remove('hidden');
+      await new Promise((r) => { next = r; });
+      AudioManager.sfx('click');
     }
     el.onclick = null;
-    el.classList.remove('dark');
+    el.classList.remove('comic-bg');
     this.hide();
     onNew(name);
   },

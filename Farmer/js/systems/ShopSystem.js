@@ -5,8 +5,10 @@ import { CROPS, CROP_ORDER, isCropUnlocked } from '../data/crops.js';
 import { RANKS } from '../data/ranks.js';
 import { CLOTHES } from '../data/clothes.js';
 import { getItem } from '../data/items.js';
+import { GEAR, GEAR_ORDER } from '../data/tools.js';
 import { InventorySystem } from './InventorySystem.js';
 import { OutfitSystem } from './OutfitSystem.js';
+import { GearSystem } from './GearSystem.js';
 import { toast } from '../ui/HUD.js';
 
 export const ShopSystem = {
@@ -24,8 +26,9 @@ export const ShopSystem = {
       const it = getItem(id);
       return { itemId: id, item: it, unlocked: !it.unlockFlag || G.state.flags[it.unlockFlag], req: '오 씨의 부탁을 들어주면 판매' };
     });
+    const specials = ['special_growth'].map((id) => ({ itemId: id, item: getItem(id), unlocked: true }));
     const clothes = Object.entries(CLOTHES).filter(([, c]) => c.shop === 'shop').map(([id, c]) => ({ itemId: id, item: { ...c, id, type: 'cloth' }, unlocked: true }));
-    return [...foods, ...clothes];
+    return [...foods, ...specials, ...clothes];
   },
 
   maxAffordable(itemId) {
@@ -64,6 +67,38 @@ export const ShopSystem = {
     OutfitSystem.addClothes(id);
     AudioManager.sfx('coin');
     toast(`${c.icon} ${c.name}을(를) 샀어요! 가방의 '옷' 탭에서 입을 수 있어요`, 'good');
+    EventBus.emit('money');
+  },
+
+  /** 상점 장비 목록 — 기본 지급(낡은) 장비는 제외. 구매는 직책 무관, 착용은 직책 필요 */
+  gearList() {
+    return GEAR_ORDER.filter((id) => GEAR[id].price > 0).map((id) => {
+      const g = GEAR[id];
+      return {
+        id, gear: g,
+        owned: GearSystem.owns(id),
+        equipped: GearSystem.isEquipped(id),
+        canEquip: GearSystem.canEquip(id),
+        rankName: GearSystem.requiredRankName(id),
+      };
+    });
+  },
+
+  buyGear(id) {
+    const g = GEAR[id];
+    if (!g) return;
+    if (GearSystem.owns(id)) return toast('이미 가지고 있어요');
+    if (G.state.player.money < g.price) {
+      AudioManager.sfx('error');
+      return toast('돈이 부족해요', 'warn');
+    }
+    G.state.player.money -= g.price;
+    GearSystem.add(id);
+    AudioManager.sfx('coin');
+    const hint = GearSystem.canEquip(id)
+      ? "가방의 '장비' 탭에서 장착할 수 있어요"
+      : `'${GearSystem.requiredRankName(id)}' 직책이 되면 장착할 수 있어요`;
+    toast(`${g.icon} ${g.name}을(를) 샀어요! ${hint}`, 'good');
     EventBus.emit('money');
   },
 

@@ -1,6 +1,6 @@
 // 이장 메인 퀘스트 15개 — 순서대로 1개씩 진행
-// objective kind: talk, till, plant, plantedPlots, harvest, earn, sellCount, deliver, toolLevel,
-//                 relation, dayHarvest, totalEarned, talkRain, talkTimes
+// objective kind: talk, till, plant, plantedPlots, harvest, earn, sellCount, deliver, toolLevel(장비 등급),
+//                 enhance(장비 강화), relation, dayHarvest, totalEarned, talkRain, talkTimes
 export const MAIN_QUESTS = [
   {
     id: 'main_01', title: '마을에 온 것을 환영하네', desc: '마을 사람들에게 인사를 해 보자.',
@@ -18,7 +18,7 @@ export const MAIN_QUESTS = [
   },
   {
     id: 'main_03', title: '땀의 결실', desc: '물을 주고 정성껏 키운 상추를 수확하자.',
-    offer: ['작물은 물을 준 날에만 자란다네.', '물뿌리개(2번)로 물을 주고, 밤에 푹 자고 나면 쑥쑥 클 걸세.', '상추 세 개를 수확해 보게. 수확한 건 창고로 바로 들어간다네.'],
+    offer: ['작물은 물을 준 날에만 자란다네.', '물뿌리개(2번)로 물을 주고, 밤에 푹 자고 나면 쑥쑥 클 걸세.', '다 자라면 낫(3번)을 들고 상추 세 개를 수확해 보게. 수확한 건 창고로 바로 들어간다네.', '수확하고 나면 땅이 굳으니, 다시 심기 전에 호미로 갈아 주게.'],
     done: ['첫 수확을 축하하네! 그 기쁨을 잊지 말게.'],
     objectives: [{ kind: 'harvest', crop: 'lettuce', count: 3 }],
     rewards: { money: 150 },
@@ -38,8 +38,8 @@ export const MAIN_QUESTS = [
     rewards: { money: 300, clothes: ['cloth_straw_hat'], relation: { grandma: 10 } },
   },
   {
-    id: 'main_06', title: '더 좋은 도구', desc: '대장간에서 농기구 하나를 2단계로 강화하자.',
-    offer: ['낡은 도구로는 한계가 있지.', '대장간의 강 대장에게 가서 농기구 하나를 강화해 보게.'],
+    id: 'main_06', title: '더 좋은 도구', desc: '상점에서 구리 농기구를 하나 사서 장착하자.',
+    offer: ['낡은 도구로는 한계가 있지.', '자네도 이제 초보 농부니, 상점에서 구리 농기구를 하나 사서 써 보게.'],
     done: ['반짝반짝하구먼! 일이 훨씬 수월해질 걸세.'],
     objectives: [{ kind: 'toolLevel', level: 2, count: 1 }],
     rewards: { money: 500 },
@@ -76,10 +76,10 @@ export const MAIN_QUESTS = [
     rewards: { money: 1000 },
   },
   {
-    id: 'main_11', title: '대장간의 부탁', desc: '농기구 2개를 3단계 이상으로 강화하자.',
-    offer: ['강 대장이 실력 발휘를 하고 싶어 하더군.', '농기구 두 개를 3단계 이상으로 강화해 보게.'],
+    id: 'main_11', title: '대장간의 부탁', desc: '장착한 농기구 2개를 +2 이상으로 강화하자.',
+    offer: ['강 대장이 실력 발휘를 하고 싶어 하더군.', '쓰고 있는 농기구 두 개를 +2 이상으로 강화해 보게.'],
     done: ['강 대장이 자네를 단골이라고 부르더군. 허허.'],
-    objectives: [{ kind: 'toolLevel', level: 3, count: 2 }],
+    objectives: [{ kind: 'enhance', level: 2, count: 2 }],
     rewards: { money: 1500, relation: { smith: 10 } },
   },
   {

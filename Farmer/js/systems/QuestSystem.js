@@ -8,8 +8,9 @@ import { CROPS } from '../data/crops.js';
 import { NPCS } from '../data/npcs.js';
 import { CLOTHES } from '../data/clothes.js';
 import { getItem } from '../data/items.js';
-import { TOOL_ORDER } from '../data/tools.js';
+import { TOOL_ORDER, TIERS } from '../data/tools.js';
 import { InventorySystem } from './InventorySystem.js';
+import { GearSystem } from './GearSystem.js';
 import { RelationSystem } from './RelationSystem.js';
 import { OutfitSystem } from './OutfitSystem.js';
 import { FarmSystem, EXPAND_COSTS } from './FarmSystem.js';
@@ -90,9 +91,17 @@ export const QuestSystem = {
         if (p.done) label += ' (전달 완료)';
         break;
       }
-      case 'toolLevel':
-        cur = TOOL_ORDER.filter((k) => s.tools[k] >= o.level).length; need = o.count;
-        label = o.count >= 3 ? `모든 농기구 ${o.level}단계 이상` : `농기구 ${o.level}단계 이상으로 강화`;
+      case 'toolLevel': {
+        // 장착한 장비 등급(낡은 1 ~ 무지개 6) 기준
+        cur = TOOL_ORDER.filter((k) => GearSystem.levelOf(k) >= o.level).length; need = o.count;
+        const tierName = TIERS[o.level - 1]?.name ?? '';
+        label = o.count >= 3 ? `모든 농기구를 ${o.level}단계(${tierName}) 이상 장비로 장착` : `${o.level}단계(${tierName}) 이상 농기구 장착`;
+        break;
+      }
+      case 'enhance':
+        // 장착한 장비의 강화 단계 기준
+        cur = GearSystem.countEnhanced(o.level); need = o.count;
+        label = o.count >= 3 ? `장착한 모든 농기구를 +${o.level} 이상 강화` : `장착한 농기구를 +${o.level} 이상 강화`;
         break;
       case 'relation':
         cur = RelationSystem.countWithHearts(o.hearts); need = o.count;
@@ -274,6 +283,8 @@ export const QuestSystem = {
         case 'earn': case 'sellCount': case 'totalEarned':
           return { ...this.npcPos('shop'), label: '상점' };
         case 'toolLevel':
+          return { ...this.npcPos('shop'), label: '상점' };
+        case 'enhance':
           return { ...this.npcPos('smith'), label: '대장간' };
         case 'relation':
           return { x: PLAZA.x, z: PLAZA.z, label: '마을 광장' };
@@ -334,7 +345,7 @@ export const QuestSystem = {
       if (o.kind === 'earn') p.n += money;
       if (o.kind === 'sellCount') p.n += n;
     }));
-    for (const evt of ['upgrade', 'relation', 'money', 'storage', 'inventory', 'farmExpand']) {
+    for (const evt of ['gear', 'relation', 'money', 'storage', 'inventory', 'farmExpand']) {
       EventBus.on(evt, () => EventBus.emit('quests'));
     }
   },

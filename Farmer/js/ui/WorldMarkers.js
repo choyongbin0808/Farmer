@@ -30,7 +30,7 @@ export function initMarkers(scene, cam, handlers) {
     const el = document.createElement('div');
     el.className = 'mk harvest hidden';
     el.textContent = '🧺';
-    el.title = '클릭해서 수확';
+    el.title = '낫을 들고 클릭해서 수확';
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       onPlotClick?.(plot);
@@ -47,7 +47,7 @@ export function initMarkers(scene, cam, handlers) {
   }
 
   const geo = new THREE.CylinderGeometry(0.6, 0.6, 30, 16, 1, true);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+  const mat = new THREE.MeshBasicMaterial({ color: 0xd8b878, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
   beacon = new THREE.Mesh(geo, mat);
   beacon.position.y = 15;
   beacon.visible = false;
@@ -88,7 +88,7 @@ export function updateMarkers(dt, t, playerPos, visible) {
     const tag = npcTags[id];
     const npc = G.refs.npcs[id];
     const d = Math.hypot(npc.pos.x - playerPos.x, npc.pos.z - playerPos.z);
-    const h = 2.6 * (NPCS[id].look.scale ?? 1);
+    const h = 1.95 * (NPCS[id].look.scale ?? 1);
     const p = project(npc.pos.x, npc.pos.y + h, npc.pos.z);
     const qIcon = G.mode === 'play' ? QuestSystem.npcIcon(id) : null;
     const icon = qIcon || (d < 5 && G.mode === 'play' ? '💬' : '');

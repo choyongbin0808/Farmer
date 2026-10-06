@@ -1,9 +1,10 @@
 import { G, FARM_MAX, formatMoney } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { CROPS, stars } from '../data/crops.js';
-import { TOOL_LEVELS, harvestText } from '../data/tools.js';
+import { harvestText } from '../data/tools.js';
 import { FarmSystem, EXPAND_COSTS } from '../systems/FarmSystem.js';
 import { StaminaSystem } from '../systems/StaminaSystem.js';
+import { GearSystem } from '../systems/GearSystem.js';
 import { openModal, refreshModal, closeModal } from './Panels.js';
 
 const STAGE_NAMES = ['🌰 씨앗', '🌱 새싹', '🌿 자라는 중', '🧺 수확 가능'];
@@ -66,8 +67,8 @@ function renderInfo(body) {
   const stage = plot.stage();
   const left = Math.max(0, c.days - d.daysGrown);
   const pct = Math.round((Math.min(d.daysGrown, c.days) / c.days) * 100);
-  const sickle = s.tools.sickle;
-  const [hMin, hMax] = TOOL_LEVELS[sickle].harvest;
+  const sickle = GearSystem.stats('sickle');
+  const [hMin, hMax] = sickle.harvest;
   const income = hMin === hMax ? `${formatMoney(c.sellPrice * hMin)}원` : `${formatMoney(c.sellPrice * hMin)}~${formatMoney(c.sellPrice * hMax)}원`;
   const readyDay = s.time.day + left;
 
@@ -97,7 +98,7 @@ function renderInfo(body) {
         <div><span>📅 심은 날</span>${d.plantedDay ? `${d.plantedDay}일차` : '-'}</div>
         <div><span>🌱 총 성장 기간</span>${c.days}일 (물 준 날만 자라요)</div>
         <div><span>💰 판매가</span>개당 ${formatMoney(c.sellPrice)}원</div>
-        <div><span>🧺 예상 수확</span>${harvestText(sickle)} · ${income}<small>${TOOL_LEVELS[sickle].name} 낫 기준</small></div>
+        <div><span>🧺 예상 수확</span>${harvestText(sickle.harvest)} · ${income}<small>${GearSystem.displayName(GearSystem.equippedId('sickle'))} 기준</small></div>
         <div><span>⚡ 심기 체력</span>${StaminaSystem.plantCost(d.cropId)} (기본 ${c.staminaCost})</div>
         <div><span>🛒 씨앗 가격</span>${formatMoney(c.seedPrice)}원</div>
       </div>

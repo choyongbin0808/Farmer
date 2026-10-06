@@ -2,8 +2,9 @@ import { G, FARM_MAX } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { CROPS } from '../data/crops.js';
-import { TOOL_LEVELS, rangeOffsets, rollHarvest } from '../data/tools.js';
+import { rangeOffsets, rollHarvest } from '../data/tools.js';
 import { InventorySystem } from './InventorySystem.js';
+import { GearSystem } from './GearSystem.js';
 import { StorageSystem } from './StorageSystem.js';
 import { StaminaSystem } from './StaminaSystem.js';
 import { burst, flyToStorage } from '../world/Effects.js';
@@ -24,19 +25,18 @@ function plotAt(r, c) {
 }
 
 export const FarmSystem = {
-  /** 도구 단계에 따른 작업 범위의 밭 목록 */
-  rangePlots(plot, level) {
-    return rangeOffsets(level).map(([dr, dc]) => plotAt(plot.r + dr, plot.c + dc)).filter(Boolean);
+  /** 장비 범위('single' | 'row' | 'square')에 따른 작업 대상 밭 목록 */
+  rangePlots(plot, range) {
+    return rangeOffsets(range).map(([dr, dc]) => plotAt(plot.r + dr, plot.c + dc)).filter(Boolean);
   },
 
   /** 마우스를 올렸을 때 강조할 밭 목록과 상태 */
   preview(plot) {
     if (!plot?.active) return null;
-    if (plot.isReady()) return { plots: [plot], ok: true };
+    if (plot.isReady()) return { plots: [plot], ok: this.holdingSickle() };
     const item = InventorySystem.getHeldItem();
     if (item?.type === 'tool' && item.toolKind !== 'sickle') {
-      const lv = G.state.tools[item.toolKind];
-      return { plots: this.rangePlots(plot, lv), ok: true };
+      return { plots: this.rangePlots(plot, GearSystem.stats(item.toolKind).range), ok: true };
     }
     if (item?.type === 'seed') {
       const ok = plot.data.state === 'tilled' && StaminaSystem.canPlant(item.cropId);
@@ -51,17 +51,28 @@ export const FarmSystem = {
     const item = InventorySystem.getHeldItem();
     if (item?.type === 'special') return false;
     if (item?.type === 'tool' && item.toolKind === 'can') {
-      const needWater = this.rangePlots(plot, G.state.tools.can).some((p) => p.data.state !== 'empty' && !p.data.watered && !p.isReady());
+      const needWater = this.rangePlots(plot, GearSystem.stats('can').range).some((p) => p.data.state !== 'empty' && !p.data.watered && !p.isReady());
       return !needWater;
     }
     return true;
+  },
+
+  /** 수확은 낫 계열(낫 · 파종기)을 들고 있을 때만 */
+  holdingSickle() {
+    const item = InventorySystem.getHeldItem();
+    return item?.type === 'tool' && item.toolKind === 'sickle';
+  },
+
+  needSickle() {
+    AudioManager.sfx('error');
+    toast(`${GearSystem.equipped('sickle').icon} ${GearSystem.equipped('sickle').name}을(를) 들어야 수확할 수 있어요 (핫바에서 선택)`, 'warn');
   },
 
   usePlot(plot) {
     if (!plot.active) return;
     const player = G.refs.player;
     if (player.work) return;
-    if (plot.isReady()) return this.harvest(plot);
+    if (plot.isReady()) return this.holdingSickle() ? this.harvest(plot) : this.needSickle();
 
     const held = InventorySystem.getHeld();
     const item = held?.item;
@@ -82,14 +93,14 @@ export const FarmSystem = {
   },
 
   till(plot) {
-    const lv = G.state.tools.hoe;
-    const targets = this.rangePlots(plot, lv).filter((p) => p.data.state === 'empty');
+    const st = GearSystem.stats('hoe');
+    const targets = this.rangePlots(plot, st.range).filter((p) => p.data.state === 'empty');
     if (!targets.length) {
       toast(plot.data.state === 'planted' ? '작물이 자라고 있어요' : '이미 갈린 땅이에요');
       return;
     }
     G.refs.player.faceTo(plot.x, plot.z);
-    G.refs.player.startWork(TOOL_LEVELS[lv].time, () => {
+    G.refs.player.startWork(st.time, () => {
       for (const p of targets) {
         p.data.state = 'tilled';
         p.refresh();
@@ -97,18 +108,18 @@ export const FarmSystem = {
       }
       AudioManager.sfx('till');
       EventBus.emit('till', targets.length);
-    });
+    }, 'till');
   },
 
   water(plot) {
-    const lv = G.state.tools.can;
-    const targets = this.rangePlots(plot, lv).filter((p) => p.data.state !== 'empty' && !p.data.watered && !p.isReady());
+    const st = GearSystem.stats('can');
+    const targets = this.rangePlots(plot, st.range).filter((p) => p.data.state !== 'empty' && !p.data.watered && !p.isReady());
     if (!targets.length) {
       toast(plot.data.state === 'empty' ? '먼저 호미로 땅을 갈아 주세요' : '이미 물을 줬어요 💧');
       return;
     }
     G.refs.player.faceTo(plot.x, plot.z);
-    G.refs.player.startWork(TOOL_LEVELS[lv].time, () => {
+    G.refs.player.startWork(st.time, () => {
       for (const p of targets) {
         p.data.watered = true;
         p.refresh();
@@ -116,7 +127,7 @@ export const FarmSystem = {
       }
       AudioManager.sfx('water');
       EventBus.emit('water', targets.length);
-    });
+    }, 'water');
   },
 
   plant(plot, held) {
@@ -131,7 +142,7 @@ export const FarmSystem = {
       return;
     }
     G.refs.player.faceTo(plot.x, plot.z);
-    G.refs.player.startWork(0.3, () => {
+    G.refs.player.startWork(0.45, () => {
       if (plot.data.state !== 'tilled' || !InventorySystem.removeFromSlot(held.area, held.index, 1)) return;
       StaminaSystem.spend(cost);
       d.state = 'planted';
@@ -139,34 +150,39 @@ export const FarmSystem = {
       d.daysGrown = 0;
       d.plantedDay = G.state.time.day;
       plot.refresh();
+      burst({ x: plot.x, z: plot.z }, { color: 0xd9b47a, count: 10, up: 1.5 });
       AudioManager.sfx('plant');
       EventBus.emit('plant', cropId);
-    });
+    }, 'plant');
   },
 
+  /** 성장 아이템(비료 · 성장 촉진제): item.growDays 만큼 성장, 'all'이면 바로 다 자람 */
   fertilize(plot, held) {
     const d = plot.data;
+    const item = held.item;
     if (d.state !== 'planted' || plot.isReady()) return toast('자라고 있는 작물에만 쓸 수 있어요');
     InventorySystem.removeFromSlot(held.area, held.index, 1);
-    d.daysGrown += 1;
+    const days = CROPS[d.cropId].days;
+    d.daysGrown = item.growDays === 'all' ? days : Math.min(days, d.daysGrown + (item.growDays ?? 1));
     plot.refresh();
     burst({ x: plot.x, z: plot.z }, { color: 0x9be36a, count: 24, up: 3 });
     AudioManager.sfx('plant');
-    toast('🧪 비료 덕분에 작물이 쑥 자랐어요!', 'good');
+    toast(plot.isReady() ? `${item.icon} ${CROPS[d.cropId].name}이(가) 다 자랐어요! 바로 수확할 수 있어요` : `${item.icon} ${item.name} 덕분에 작물이 쑥 자랐어요!`, 'good');
   },
 
   harvest(plot) {
-    const lv = G.state.tools.sickle;
+    const st = GearSystem.stats('sickle');
     G.refs.player.faceTo(plot.x, plot.z);
-    G.refs.player.startWork(TOOL_LEVELS[lv].time, () => {
+    G.refs.player.startWork(st.time, () => {
       const d = plot.data;
       if (!plot.isReady()) return;
       const cropId = d.cropId;
-      const amount = rollHarvest(lv);
+      const amount = rollHarvest(st.harvest);
       StorageSystem.add('crop_' + cropId, amount);
       G.state.stats.totalHarvest += amount;
       G.state.stats.todayHarvest += amount;
-      d.state = 'tilled';
+      // 수확한 땅은 굳어서 다시 호미로 갈아야 함
+      d.state = 'empty';
       d.cropId = null;
       d.daysGrown = 0;
       d.watered = false;
@@ -175,7 +191,7 @@ export const FarmSystem = {
       AudioManager.sfx('harvest');
       toast(`${CROPS[cropId].icon} +${amount} ${CROPS[cropId].name} → 창고`);
       EventBus.emit('harvest', { cropId, amount });
-    });
+    }, 'harvest');
   },
 
   /** 잠자고 일어날 때: 물 준 작물 성장 */

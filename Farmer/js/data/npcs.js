@@ -2,7 +2,7 @@
 export const NPCS = {
   chief: {
     name: '박 이장', role: '마을 이장', avatar: '👴', pos: [0, -14.6], face: 0,
-    look: { skin: 0xf3c9a0, top: 0x8a6d4b, bottom: 0x4f4034, hair: 0xeeeeee, hairStyle: 'bald', beard: 0xeeeeee, glasses: true },
+    look: { skin: 0xf0c8a4, top: 0xa8805a, bottom: 0x6a5848, hair: 0xeeece6, hairStyle: 'bald', beard: 0xeeece6, glasses: true },
     greet: [
       '허허, 오늘도 부지런하구먼.',
       '자네가 온 뒤로 마을에 활기가 도는 것 같아.',
@@ -16,7 +16,7 @@ export const NPCS = {
   },
   shop: {
     name: '최 사장', role: '상점 주인', avatar: '🧑‍💼', pos: [-15.6, -4], face: Math.PI / 2,
-    look: { skin: 0xf1c27d, top: 0xf2a541, bottom: 0x3e4a5c, hair: 0x2b2b2b, hairStyle: 'short', cap: 0xd2483f },
+    look: { skin: 0xeec09a, top: 0xf0b048, bottom: 0x4a5a78, hair: 0x2e2420, hairStyle: 'short', cap: 0xd8503e },
     greet: [
       '어서 오세요! 오늘도 좋은 씨앗 많이 들어왔어요.',
       '싱싱한 작물은 언제든 사 드려요!',
@@ -29,20 +29,21 @@ export const NPCS = {
   },
   smith: {
     name: '강 대장', role: '대장장이', avatar: '🧔', pos: [-15.6, -17], face: Math.PI / 2,
-    look: { skin: 0xd9a066, top: 0x6b4b3a, bottom: 0x3a3a3a, hair: 0x3b2a1e, hairStyle: 'short', beard: 0x3b2a1e },
+    look: { skin: 0xd8a07a, top: 0x8a5a3c, bottom: 0x4a4644, hair: 0x3a2618, hairStyle: 'short', beard: 0x3a2618 },
     greet: [
       '…왔나.',
       '도구는 손에 익어야 제맛이지.',
       '좋은 도구가 좋은 농사를 만든다.',
     ],
     chat: [
-      '강화한 호미는 한 번에 여러 칸을 갈 수 있지.',
-      '낫을 강화하면 한 번에 더 많이 거둘 수 있다.',
+      '철 호미부터는 한 번에 여러 칸을 갈 수 있지. 상점에서 팔더군.',
+      '강화하면 손놀림이 빨라지고, 낫은 더 많이 거둔다. 장비마다 따로 올려야 해.',
+      '좋은 장비를 사 둬도 직책이 안 되면 못 쓴다. 마을 일부터 열심히 해라.',
     ],
   },
   grandma: {
     name: '김 할머니', role: '마을 주민', avatar: '👵', pos: [15.6, -17], face: -Math.PI / 2,
-    look: { skin: 0xf3d2b3, top: 0xb07cc6, bottom: 0x7a5a8a, hair: 0xb8b8b8, hairStyle: 'bun' },
+    look: { skin: 0xf4d0b4, top: 0xb08ac8, bottom: 0x7a6488, hair: 0xd0ccc6, hairStyle: 'bun' },
     greet: [
       '아이고, 우리 새 이웃 왔구먼!',
       '밥은 먹고 다니는 겨?',
@@ -55,7 +56,7 @@ export const NPCS = {
   },
   minji: {
     name: '민지', role: '마을 꼬마', avatar: '👧', pos: [3, -6], face: 0, wander: { x: 0, z: -6, r: 5 },
-    look: { skin: 0xf6d3b5, top: 0xffd34d, bottom: 0x4aa3df, hair: 0x2b2b2b, hairStyle: 'pigtail', scale: 0.72 },
+    look: { skin: 0xf6d2b4, top: 0xffd25a, bottom: 0x58a0d8, hair: 0x2e2420, hairStyle: 'pigtail', scale: 0.72 },
     greet: [
       '안녕! 오늘 뭐 하고 놀아?',
       '나 딸기 엄청 좋아해!',
@@ -68,7 +69,7 @@ export const NPCS = {
   },
   sua: {
     name: '수아', role: '꽃집 주인', avatar: '👩', pos: [15.6, -4], face: -Math.PI / 2,
-    look: { skin: 0xf7d7c0, top: 0x9ad19a, bottom: 0xf2f2f2, hair: 0x7a4b2a, hairStyle: 'long' },
+    look: { skin: 0xf6d4bc, top: 0x96cc90, bottom: 0xf4f0e8, hair: 0x7a4a2a, hairStyle: 'long' },
     greet: [
       '안녕! 나도 도시에서 왔어. 반가워.',
       '시골 생활, 생각보다 할 만하지?',
@@ -81,7 +82,7 @@ export const NPCS = {
   },
   fisher: {
     name: '오 씨', role: '어부', avatar: '🎣', pos: [12, -29], face: Math.PI,
-    look: { skin: 0xd9a066, top: 0x3f7fbf, bottom: 0x5a5a3a, hair: 0x555555, hairStyle: 'short', hatStraw: 0x7aa05a },
+    look: { skin: 0xd8a07a, top: 0x4a86c4, bottom: 0x6a6a44, hair: 0x5a5a5a, hairStyle: 'short', hatStraw: 0xe2c47e },
     greet: [
       '쉿… 물고기가 놀라.',
       '바람이 좋구먼.',

@@ -53,15 +53,14 @@ export const DialogueSystem = {
       await DialogueUI.say(speaker(npcId), [greeting(npcId, first)]);
       let loop = true;
       while (loop) {
+        // 줄 수 있는 부탁이 있으면 이야기하자마자 들려주고 자동으로 수락 (완료 보고 뒤 새로 생긴 부탁도 포함)
+        for (const q of QuestSystem.offersFor(npcId)) await this.doOffer(npcId, q);
         const opts = [];
         for (const d of QuestSystem.deliverablesFor(npcId)) {
           opts.push({ label: `🎁 ${getItem(d.o.item).name} ${d.o.n}개 전달하기`, highlight: true, run: () => this.doDeliver(npcId, d) });
         }
         for (const { q } of QuestSystem.completableFor(npcId)) {
           opts.push({ label: `✅ 부탁 완료 보고: ${q.title}`, highlight: true, run: () => this.doComplete(npcId, q) });
-        }
-        for (const q of QuestSystem.offersFor(npcId)) {
-          opts.push({ label: `❗ 부탁 듣기: ${q.title}`, highlight: true, run: () => this.doOffer(npcId, q) });
         }
         if (npcId === 'shop') opts.push({ label: '🛒 거래하기', run: () => { openAfter = 'shop'; return false; } });
         if (npcId === 'smith') opts.push({ label: '🔨 대장간 이용하기', run: () => { openAfter = 'forge'; return false; } });
@@ -88,20 +87,15 @@ export const DialogueSystem = {
     return true;
   },
 
+  /** 부탁 내용을 들려주고 바로 수락 처리 (수락 버튼 없음) */
   async doOffer(npcId, q) {
     await DialogueUI.say(speaker(npcId), q.offer);
-    const choice = await DialogueUI.choose(speaker(npcId), `[${q.title}]\n${objectiveSummary(q)}`, [
-      { label: '👍 수락하기', id: 'yes', highlight: true },
-      { label: '🙏 다음에 할게요', id: 'no' },
-    ]);
-    if (choice.id === 'yes') {
-      QuestSystem.accept(q);
-      EventBus.emit('talkAccepted', npcId);
-      const thanks = npcId === 'chief'
-        ? '고맙네! 할 일과 위치는 퀘스트 창(📜)에서 확인할 수 있을 걸세.'
-        : '고마워! 잘 부탁해.';
-      await DialogueUI.say(speaker(npcId), [thanks]);
-    }
+    QuestSystem.accept(q);
+    EventBus.emit('talkAccepted', npcId);
+    const thanks = npcId === 'chief'
+      ? '그럼 잘 부탁하네! 할 일과 위치는 퀘스트 창(📜)에서 확인할 수 있을 걸세.'
+      : '그럼 잘 부탁해!';
+    await DialogueUI.say(speaker(npcId), [`📜 새 부탁 [${q.title}]\n${objectiveSummary(q)}`, thanks]);
     return true;
   },
 

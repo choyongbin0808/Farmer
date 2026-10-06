@@ -14,8 +14,8 @@ import { Player } from './entities/Player.js';
 import { NPC } from './entities/NPC.js';
 import { FarmPlot } from './entities/FarmPlot.js';
 import { NPCS, NPC_ORDER } from './data/npcs.js';
-import { TOOL_LEVELS } from './data/tools.js';
 import { InventorySystem } from './systems/InventorySystem.js';
+import { GearSystem } from './systems/GearSystem.js';
 import { StaminaSystem } from './systems/StaminaSystem.js';
 import { FarmSystem } from './systems/FarmSystem.js';
 import { TimeSystem } from './systems/TimeSystem.js';
@@ -52,7 +52,12 @@ let hoverTimer = 0;
 // ───────── 초기화 ─────────
 async function boot() {
   loadSettings();
-  await Promise.race([document.fonts?.ready, new Promise((r) => setTimeout(r, 1500))]);
+  // 3D 간판 글씨(캔버스)는 그리는 순간의 글꼴로 굳어지므로, 간판 글자가 든 Jua 조각을 먼저 받아 둔다
+  const SIGN_TEXT = '우리 집 창고 상점 대장간 마을회관 김 할머니 댁 수아 꽃집 내 밭 · 확장 0123456789';
+  await Promise.race([
+    Promise.all([document.fonts?.load(`40px Jua`, SIGN_TEXT), document.fonts?.ready]),
+    new Promise((r) => setTimeout(r, 3000)),
+  ]).catch(() => {});
 
   SM.init(canvas);
   buildWorld(SM.scene);
@@ -107,6 +112,7 @@ async function boot() {
   StorageUI.init();
   FarmUI.init();
   QuestSystem.init();
+  GearSystem.init();
 
   DialogueSystem.openTrade = (what) => {
     if (what === 'shop') ShopUI.open();
@@ -116,7 +122,7 @@ async function boot() {
   MenuUI.onTitle = goTitle;
   G.refs.eatHeld = eatHeld;
 
-  for (const evt of ['held', 'inventory', 'upgrade']) EventBus.on(evt, updateHeldModel);
+  for (const evt of ['held', 'inventory', 'gear']) EventBus.on(evt, updateHeldModel);
   EventBus.on('heartUp', (id) => toast(`❤️ ${NPCS[id].name}와(과) 더 친해졌어요!`, 'good'));
 
   Input.init(canvas, {
@@ -268,6 +274,7 @@ function approach(x, z, reach, cb) {
 function interactPlot(plot) {
   if (G.mode !== 'play' || isUIBlocking() || !plot.active) return;
   if (FarmSystem.showsInfo(plot)) return FarmUI.openCropInfo(plot);
+  if (plot.isReady() && !FarmSystem.holdingSickle()) return FarmSystem.needSickle();
   approach(plot.x, plot.z, 1.7, () => FarmSystem.usePlot(plot));
 }
 
@@ -314,8 +321,9 @@ function eatHeld() {
 function updateHeldModel() {
   if (!G.state) return;
   const item = InventorySystem.getHeldItem();
-  const color = item?.type === 'tool' ? TOOL_LEVELS[G.state.tools[item.toolKind]].color : 0x8a7b6a;
-  player.setHeld(item, color);
+  const tool = item?.type === 'tool';
+  const color = tool ? GearSystem.stats(item.toolKind).color : 0x8a7b6a;
+  player.setHeld(item, color, tool ? GearSystem.equipped(item.toolKind).vehicle : null);
 }
 
 // ───────── 마우스 오버 미리보기 ─────────

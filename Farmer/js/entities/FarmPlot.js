@@ -3,12 +3,18 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { G } from '../core/Game.js';
 import { CROPS } from '../data/crops.js';
 import { makeCropModel } from '../world/Models.js';
+import { soilTex } from '../world/Textures.js';
 
-const SOIL_GEO = new RoundedBoxGeometry(1.5, 0.14, 1.5, 2, 0.05);
+const SOIL_GEO = new RoundedBoxGeometry(1.5, 0.14, 1.5, 2, 0.04);
+// 굳은 땅 / 고랑을 낸 마른 흙 / 물 먹은 흙
+const soilMat = (kind, roughness) => {
+  const t = soilTex(kind);
+  return new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap, normalScale: new THREE.Vector2(1.2, 1.2), roughness });
+};
 const MATS = {
-  empty: new THREE.MeshLambertMaterial({ color: 0x7aaa40 }),
-  dry: new THREE.MeshLambertMaterial({ color: 0xb07d4b }),
-  wet: new THREE.MeshLambertMaterial({ color: 0x6d4c33 }),
+  empty: soilMat('untilled', 0.98),
+  dry: soilMat('tilled', 0.97),
+  wet: soilMat('wet', 0.62),
 };
 
 export class FarmPlot {

@@ -1,29 +1,45 @@
+/* 동물의 숲 느낌 UI: 포근한 크림색 둥근 패널 + 따뜻한 갈색 글씨 + 둥근 한글 글꼴 */
 :root {
-  --cream: #fff8e7;
-  --cream-2: #fdf0d2;
-  --brown: #8b5e3c;
-  --brown-dark: #5e3d24;
-  --green: #6fbf4a;
-  --green-dark: #3f7a2a;
-  --yellow: #ffd84d;
-  --orange: #f28a2e;
-  --red: #e5483b;
-  --pink: #ff8fb8;
-  --shadow: 0 6px 18px rgba(80, 50, 20, 0.25);
-  --radius: 16px;
-  --font-title: 'Jua', 'Gowun Dodum', sans-serif;
-  --font-body: 'Gowun Dodum', 'Jua', sans-serif;
+  --bg-panel: rgba(255, 250, 236, 0.95);
+  --bg-inset: #fbf3df;
+  --bg-inset-2: #f3e7cc;
+  --well: #efe2c4;
+  --line: #ecdcb8;
+  --line-strong: #d7bf92;
+  --text: #6a4c34;
+  --text-dim: #a08566;
+  --gold: #e6a93a;
+  --gold-soft: #fff1c6;
+  --green: #7cc05a;
+  --green-light: #5aa63c;
+  --green-dark: #4f8a36;
+  --red: #e2685a;
+  --orange: #f0a04a;
+  --shadow: 0 8px 22px rgba(120, 88, 50, 0.22);
+  --radius: 18px;
+  /* 글꼴은 Jua 하나로 통일 (굵기가 하나뿐이라 가짜 굵게 처리는 끔) */
+  --font-title: 'Jua', sans-serif;
+  --font-body: 'Jua', sans-serif;
+
+  /* 예전 변수 이름 호환 */
+  --cream: var(--bg-panel);
+  --cream-2: var(--bg-inset-2);
+  --brown: var(--line-strong);
+  --brown-dark: var(--text);
+  --yellow: var(--gold);
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; font-synthesis: none; }
+b, strong, h1, h2, h3, h4, th { font-weight: normal; }
+input, textarea, select, button { font-family: var(--font-body); }
 
 html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #bfe3ff;
+  background: #cfe8f6;
   font-family: var(--font-body);
-  color: var(--brown-dark);
+  color: var(--text);
   user-select: none;
 }
 
@@ -40,8 +56,8 @@ html, body {
 .hidden { display: none !important; }
 
 .panel {
-  background: var(--cream);
-  border: 3px solid var(--brown);
+  background: var(--bg-panel);
+  border: 2px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
@@ -51,33 +67,34 @@ button { font-family: var(--font-title); cursor: pointer; }
 .btn {
   font-family: var(--font-title);
   font-size: 15px;
-  padding: 7px 14px;
-  border-radius: 12px;
-  border: 2px solid var(--brown);
-  background: #fff;
-  color: var(--brown-dark);
-  box-shadow: 0 3px 0 var(--brown);
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  background: #fffaf0;
+  color: var(--text);
+  box-shadow: 0 3px 0 var(--line-strong);
   transition: transform 0.08s, box-shadow 0.08s, background 0.15s;
 }
-.btn:hover:not(:disabled) { background: var(--cream-2); }
-.btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--brown); }
+.btn:hover:not(:disabled) { background: var(--gold-soft); }
+.btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--line-strong); }
 .btn.primary { background: var(--green); color: #fff; border-color: var(--green-dark); box-shadow: 0 3px 0 var(--green-dark); }
-.btn.primary:hover:not(:disabled) { background: #7fd05a; }
-.btn.small { font-size: 13px; padding: 4px 9px; border-radius: 9px; }
-.btn.big { font-size: 19px; padding: 11px 26px; border-radius: 14px; min-width: 200px; }
+.btn.primary:hover:not(:disabled) { background: #8ccf68; }
+.btn.small { font-size: 13px; padding: 4px 11px; }
+.btn.big { font-size: 18px; padding: 11px 28px; min-width: 220px; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .tag {
   display: inline-block;
   font-size: 12px;
-  padding: 1px 8px;
+  padding: 1px 9px;
   border-radius: 999px;
-  background: var(--cream-2);
-  border: 1px solid #d9b98f;
+  background: var(--bg-inset-2);
+  border: 1px solid var(--line-strong);
   font-family: var(--font-title);
+  color: var(--text);
 }
-.tag.good { background: #dff5cf; border-color: var(--green); color: var(--green-dark); }
-.tag.held { background: #fff1a8; border-color: #e0b800; }
+.tag.good { background: #e4f6d6; border-color: var(--green); color: var(--green-dark); }
+.tag.held { background: var(--gold-soft); border-color: var(--gold); color: #b07a14; }
 
 .ico { position: relative; display: inline-block; line-height: 1; }
 .sub-ico {
@@ -94,9 +111,9 @@ button { font-family: var(--font-title); cursor: pointer; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #bfe3ff;
+  background: #cfe8f6;
   font-family: var(--font-title);
-  font-size: 28px;
+  font-size: 26px;
   color: var(--green-dark);
   z-index: 100;
 }
@@ -104,7 +121,7 @@ button { font-family: var(--font-title); cursor: pointer; }
 #fade {
   position: fixed;
   inset: 0;
-  background: #1a1f33;
+  background: #1e2238;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.75s;
@@ -119,62 +136,137 @@ button { font-family: var(--font-title); cursor: pointer; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at center, rgba(255, 248, 231, 0.1), rgba(60, 40, 20, 0.35));
+  background: radial-gradient(ellipse at center, rgba(255, 250, 236, 0.05), rgba(90, 60, 30, 0.28));
   z-index: 60;
   transition: background 0.6s;
 }
-#title-screen.dark { background: #141a2c; }
+#title-screen.dark { background: #1e2238; }
 
 .title-card {
   text-align: center;
-  padding: 36px 56px 30px;
-  background: rgba(255, 248, 231, 0.92);
-  border: 4px solid var(--brown);
-  border-radius: 28px;
+  padding: 38px 60px 30px;
+  background: rgba(255, 250, 236, 0.94);
+  border: 3px solid var(--line);
+  border-radius: 32px;
   box-shadow: var(--shadow);
   animation: pop 0.5s ease-out;
 }
 .logo {
   font-family: var(--font-title);
-  font-size: 76px;
+  font-size: 72px;
   color: var(--green-dark);
-  text-shadow: 3px 4px 0 #fff, 6px 8px 0 rgba(139, 94, 60, 0.35);
-  letter-spacing: 4px;
+  letter-spacing: 6px;
+  text-shadow: 0 4px 0 #fff, 0 7px 0 rgba(160, 120, 70, 0.25);
 }
-.subtitle { font-family: var(--font-title); font-size: 21px; margin-top: 6px; }
-.genre { font-size: 15px; opacity: 0.75; margin: 4px 0 24px; }
+.subtitle { font-family: var(--font-title); font-size: 20px; margin-top: 6px; }
+.genre { font-size: 14px; color: var(--text-dim); margin: 4px 0 24px; }
 .title-buttons { display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .title-buttons.row { flex-direction: row; justify-content: center; margin-top: 18px; }
-.title-hint { margin-top: 20px; font-size: 13px; opacity: 0.7; }
+.title-hint { margin-top: 20px; font-size: 13px; color: var(--text-dim); }
 
-.name-card h2 { font-family: var(--font-title); font-size: 30px; margin: 0 0 18px; }
+.name-card h2 { font-family: var(--font-title); font-weight: normal; font-size: 28px; margin: 0 0 18px; }
 .name-card input {
   font-family: var(--font-title);
-  font-size: 24px;
+  font-size: 22px;
   text-align: center;
   padding: 10px 16px;
   width: 280px;
-  border: 3px solid var(--brown);
-  border-radius: 14px;
+  border: 2px solid var(--line-strong);
+  border-radius: 999px;
   background: #fff;
-  color: var(--brown-dark);
+  color: var(--text);
   outline: none;
 }
+.name-card input:focus { border-color: var(--gold); }
 
-.opening { text-align: center; color: #f5ead2; cursor: pointer; padding: 40px; max-width: 900px; }
-.opening p {
-  font-family: var(--font-title);
-  font-size: 30px;
-  line-height: 1.6;
-  opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.6s, transform 0.6s;
-  min-height: 100px;
+/* ───── 프롤로그 4컷 만화 ───── */
+#title-screen.comic-bg {
+  background: #fdf5e2 radial-gradient(#f0dfb8 1.6px, transparent 1.8px) 0 0 / 18px 18px;
+  cursor: pointer;
 }
-.opening p.show { opacity: 1; transform: none; }
-.opening small { opacity: 0.5; }
+.comic {
+  width: min(900px, 94vw, calc((100vh - 200px) * 1.42));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.comic-head { width: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
+.comic-title {
+  font-family: var(--font-title);
+  font-size: 26px;
+  color: var(--green-dark);
+  background: #fff;
+  border: 3px solid #5b4030;
+  border-radius: 999px;
+  padding: 2px 24px;
+  box-shadow: 0 4px 0 #5b4030;
+}
+.comic-skip { position: absolute; right: 0; }
+.comic-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%; }
+.cut {
+  position: relative;
+  background: #fff;
+  border: 4px solid #5b4030;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 6px 0 rgba(91, 64, 48, 0.25);
+  opacity: 0;
+  transform: scale(0.8) rotate(-3deg);
+  transition: opacity 0.4s, transform 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.cut:nth-child(even) { transform: scale(0.8) rotate(3deg); }
+.cut.show { opacity: 1; transform: none; }
+.cut svg { display: block; width: 100%; height: auto; }
+.cut-cap {
+  font-family: var(--font-title);
+  font-size: clamp(12px, 1.6vw, 16px);
+  line-height: 1.45;
+  padding: 7px 12px;
+  min-height: 3.6em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: #fff8e4;
+  border-top: 3px dashed #e3cfa4;
+  color: var(--text);
+}
+.cut-no {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #ffd25a;
+  border: 3px solid #5b4030;
+  font-family: var(--font-title);
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.comic-foot { min-height: 52px; display: flex; align-items: center; justify-content: center; }
+.comic-hint { color: var(--text-dim); font-family: var(--font-title); }
+.comic-start { animation: pop 0.4s ease-out; }
+
+/* 만화 속 작은 움직임 */
+.cut .twinkle { animation: twinkle 1.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.cut .float { animation: comicFloat 2s ease-in-out infinite; }
+.cut .drift { animation: drift 6s ease-in-out infinite; }
+.cut .bob { animation: bob2 0.5s ease-in-out infinite; }
+.cut .spin { animation: spin 12s linear infinite; }
+.cut .drip { animation: drip 1.6s ease-in infinite; }
+@keyframes twinkle { 0%, 100% { opacity: 1; scale: 1; } 50% { opacity: 0.4; scale: 0.7; } }
+@keyframes comicFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+@keyframes drift { 0%, 100% { translate: 0 0; } 50% { translate: 10px 0; } }
+@keyframes bob2 { 0%, 100% { translate: 0 0; } 50% { translate: 0 -2px; } }
+@keyframes spin { to { rotate: 360deg; } }
+@keyframes drip { 0% { translate: 0 0; opacity: 1; } 80% { translate: 0 8px; opacity: 1; } 100% { translate: 0 10px; opacity: 0; } }
 
 @keyframes pop {
-  from { transform: scale(0.9); opacity: 0; }
+  from { transform: scale(0.94); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }

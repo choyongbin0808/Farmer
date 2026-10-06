@@ -59,7 +59,7 @@ export function flyToStorage(cropId, from, amount) {
 }
 
 /** 작은 입자 튀기기 (흙먼지, 물방울, 반짝임) */
-export function burst(pos, { color = 0x8b5a3c, count = 14, speed = 2.5, size = 0.12, life = 0.7, up = 2, gravity = 6 } = {}) {
+export function burst(pos, { color = 0x8b5a3c, count = 14, speed = 2.5, size = 0.07, life = 0.7, up = 2, gravity = 6 } = {}) {
   const geo = new THREE.BufferGeometry();
   const arr = new Float32Array(count * 3);
   const vel = [];
@@ -90,9 +90,39 @@ export function burst(pos, { color = 0x8b5a3c, count = 14, speed = 2.5, size = 0
   });
 }
 
+// 물뿌리개 물방울 (공용 지오메트리·재질)
+const DROP_GEO = new THREE.SphereGeometry(0.045, 12, 8);
+const DROP_MAT = new THREE.MeshStandardMaterial({ color: 0x8ad8ff, roughness: 0.1, emissive: 0x3aa0d8, emissiveIntensity: 0.35, transparent: true, opacity: 0.92 });
+
+/** 물방울 하나: pos 에서 dir(앞쪽) 방향으로 톡 떨어져 땅에 닿으면 작게 튄다 */
+export function waterDrop(pos, dir) {
+  const m = new THREE.Mesh(DROP_GEO, DROP_MAT);
+  m.position.copy(pos);
+  m.scale.set(0.85, 1.35, 0.85);
+  scene.add(m);
+  const v = new THREE.Vector3(
+    dir.x * (0.5 + Math.random() * 0.4) + (Math.random() - 0.5) * 0.35,
+    -0.2 - Math.random() * 0.4,
+    dir.z * (0.5 + Math.random() * 0.4) + (Math.random() - 0.5) * 0.35,
+  );
+  active.push({
+    t: 0,
+    update(t, dt) {
+      v.y -= 9 * dt;
+      m.position.addScaledVector(v, dt);
+      if (m.position.y <= 0.13) {
+        burst({ x: m.position.x, y: -0.08, z: m.position.z }, { color: 0xc4ecff, count: 4, speed: 0.7, up: 1.1, life: 0.3, size: 0.045, gravity: 7 });
+        return false;
+      }
+      return t < 2;
+    },
+    dispose() { scene.remove(m); },
+  });
+}
+
 export function sparkle(pos) {
-  burst({ x: pos.x, y: (pos.y ?? 0) + 1, z: pos.z }, { color: 0xfff27a, count: 40, speed: 2, up: 3, gravity: 1.5, life: 1.3, size: 0.2 });
-  burst({ x: pos.x, y: (pos.y ?? 0) + 1, z: pos.z }, { color: 0xff9ad5, count: 25, speed: 1.6, up: 2.5, gravity: 1.2, life: 1.3, size: 0.18 });
+  burst({ x: pos.x, y: (pos.y ?? 0) + 1, z: pos.z }, { color: 0xffe2a0, count: 40, speed: 2, up: 3, gravity: 1.5, life: 1.3, size: 0.08 });
+  burst({ x: pos.x, y: (pos.y ?? 0) + 1, z: pos.z }, { color: 0xffffff, count: 25, speed: 1.6, up: 2.5, gravity: 1.2, life: 1.3, size: 0.06 });
 }
 
 /** 엔딩 꽃가루 */

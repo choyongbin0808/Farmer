@@ -6,7 +6,7 @@ import { openModal, refreshModal } from './Panels.js';
 
 function render(body) {
   const entries = StorageSystem.entries().sort((a, b) => getItem(b[0]).price - getItem(a[0]).price);
-  const invCrops = G.state.inventory.concat(G.state.hotbar)
+  const invCrops = G.state.bag.crop.concat(G.state.hotbar)
     .filter((s) => s && getItem(s.id).type === 'crop')
     .reduce((acc, s) => { acc[s.id] = (acc[s.id] || 0) + s.n; return acc; }, {});
 

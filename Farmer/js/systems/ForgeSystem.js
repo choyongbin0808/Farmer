@@ -1,34 +1,17 @@
-import { G } from '../core/Game.js';
-import { EventBus } from '../core/EventBus.js';
-import { AudioManager } from '../core/AudioManager.js';
-import { TOOLS, TOOL_LEVELS, MAX_TOOL_LEVEL } from '../data/tools.js';
 import { CLOTHES } from '../data/clothes.js';
 import { ShopSystem } from './ShopSystem.js';
 import { FarmSystem } from './FarmSystem.js';
-import { toast } from '../ui/HUD.js';
+import { GearSystem } from './GearSystem.js';
 
 export const ForgeSystem = {
-  upgradeCost(kind) {
-    const lv = G.state.tools[kind];
-    if (lv >= MAX_TOOL_LEVEL) return null;
-    const c = TOOL_LEVELS[lv + 1].cost;
-    return G.state.flags.discount ? Math.round(c * 0.9) : c;
+  /** 장비 하나의 다음 강화 비용 (최대면 null) */
+  enhanceCost(gearId) {
+    return GearSystem.enhanceCost(gearId);
   },
 
-  upgrade(kind) {
-    const cost = this.upgradeCost(kind);
-    if (cost === null) return;
-    if (G.state.player.money < cost) {
-      AudioManager.sfx('error');
-      return toast('돈이 부족해요', 'warn');
-    }
-    G.state.player.money -= cost;
-    G.state.tools[kind]++;
-    const lv = G.state.tools[kind];
-    AudioManager.sfx('anvil');
-    toast(`🔨 ${TOOL_LEVELS[lv].name} ${TOOLS[kind].name}(으)로 강화했어요!`, 'good');
-    EventBus.emit('upgrade', kind);
-    EventBus.emit('money');
+  /** 장비 하나를 강화 (장비마다 강화 단계가 따로 저장됨) */
+  enhance(gearId) {
+    GearSystem.enhance(gearId);
   },
 
   clothesList() {
