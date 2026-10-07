@@ -1,4 +1,4 @@
-import { G, formatMoney } from '../core/Game.js';
+import { G, formatMoney, HOTBAR_SIZE } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { getItem } from '../data/items.js';
 import { WEATHERS } from '../world/Weather.js';
@@ -46,9 +46,9 @@ export function slotHTML(slot) {
 export function initHUD(handlers) {
   const bar = $('hotbar');
   bar.innerHTML = '';
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < HOTBAR_SIZE; i++) {
     const s = document.createElement('div');
-    s.className = 'slot hot-slot';
+    s.className = `slot hot-slot${InventorySystem.isFixed('hotbar', i) ? ' fixed' : ''}`;
     s.dataset.index = i;
     s.innerHTML = `<span class="key">${i + 1}</span><div class="slot-inner"></div>`;
     s.addEventListener('click', () => InventorySystem.select('hotbar', i));

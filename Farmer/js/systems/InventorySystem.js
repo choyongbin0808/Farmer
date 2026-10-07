@@ -1,4 +1,4 @@
-import { G, BAG_AREAS } from '../core/Game.js';
+import { G, BAG_AREAS, FIXED_HOTBAR } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { getItem } from '../data/items.js';
 import { StorageSystem } from './StorageSystem.js';
@@ -15,8 +15,14 @@ function arr(area) {
 
 const ALL_AREAS = [...BAG_AREAS, 'hotbar'];
 
+/** 농기구 고정 칸 (핫바 1~3) — 옮기거나 비울 수 없다 */
+function isFixed(area, index) {
+  return area === 'hotbar' && index < FIXED_HOTBAR.length;
+}
+
 export const InventorySystem = {
   slots: arr,
+  isFixed,
 
   getHeld() {
     const h = G.ui.held;
@@ -91,7 +97,7 @@ export const InventorySystem = {
       const list = arr(a);
       for (let i = 0; i < list.length && left > 0; i++) {
         const s = list[i];
-        if (s && s.id === id) {
+        if (s && s.id === id && !isFixed(a, i)) {
           const k = Math.min(s.n, left);
           s.n -= k;
           left -= k;
@@ -106,7 +112,7 @@ export const InventorySystem = {
   removeFromSlot(area, index, n = 1) {
     const list = arr(area);
     const s = list[index];
-    if (!s) return 0;
+    if (!s || isFixed(area, index)) return 0;
     const k = Math.min(n, s.n);
     s.n -= k;
     if (s.n <= 0) list[index] = null;
@@ -119,8 +125,9 @@ export const InventorySystem = {
     return !slot || area === 'hotbar' || bagAreaOf(slot.id) === area;
   },
 
-  /** 두 칸 교환. 종류가 맞지 않는 가방 칸으로는 옮기지 않음 → false */
+  /** 두 칸 교환. 고정 칸이거나 종류가 맞지 않는 가방 칸으로는 옮기지 않음 → false */
   swap(aArea, ai, bArea, bi) {
+    if (isFixed(aArea, ai) || isFixed(bArea, bi)) return false;
     const a = arr(aArea), b = arr(bArea);
     if (!this.fits(bArea, a[ai]) || !this.fits(aArea, b[bi])) return false;
     const tmp = a[ai];

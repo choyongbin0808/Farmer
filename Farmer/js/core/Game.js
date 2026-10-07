@@ -8,6 +8,13 @@ export const GAME_MIN_PER_SEC = 2;
 /** 가방 칸: 탭(종류)마다 따로 — seed 씨앗, crop 작물, food 음식, misc 도구·특별 아이템 */
 export const BAG_AREAS = ['seed', 'crop', 'food', 'misc'];
 export const BAG_SIZE = 20;
+/** 핫바 칸 수. 앞쪽 칸들은 농기구 자리로 고정 (1 호미, 2 물뿌리개, 3 낫) */
+export const HOTBAR_SIZE = 7;
+export const FIXED_HOTBAR = ['tool_hoe', 'tool_can', 'tool_sickle'];
+
+export function newHotbar() {
+  return [...FIXED_HOTBAR.map((id) => ({ id, n: 1 })), ...Array(HOTBAR_SIZE - FIXED_HOTBAR.length).fill(null)];
+}
 
 export function newBag() {
   return Object.fromEntries(BAG_AREAS.map((a) => [a, Array(BAG_SIZE).fill(null)]));
@@ -42,13 +49,7 @@ export function createNewState(name) {
     time: { day: 1, minutes: DAY_START, weather: 'sunny' },
     farm: { size: 3, grid: FARM_MAX, plots },
     bag: newBag(),
-    hotbar: [
-      { id: 'tool_hoe', n: 1 },
-      { id: 'tool_can', n: 1 },
-      { id: 'tool_sickle', n: 1 },
-      { id: 'seed_lettuce', n: 10 },
-      null,
-    ],
+    hotbar: Object.assign(newHotbar(), { [FIXED_HOTBAR.length]: { id: 'seed_lettuce', n: 10 } }),
     storage: {},
     // 농기구 장비: 종류별 장착 중인 장비 id, 보유 장비 목록, 장비별 강화 단계
     gear: {

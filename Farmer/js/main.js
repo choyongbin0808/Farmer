@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G, FARM_MAX, createNewState, isUIBlocking } from './core/Game.js';
+import { G, FARM_MAX, HOTBAR_SIZE, createNewState, isUIBlocking } from './core/Game.js';
 import { EventBus } from './core/EventBus.js';
 import { Input } from './core/Input.js';
 import { AudioManager } from './core/AudioManager.js';
@@ -191,7 +191,7 @@ async function begin(state, isNew) {
     await DialogueSystem.intro();
     state.flags.introDone = true;
     saveGame();
-    toast('💡 WASD로 이동하고, 1~5 키로 도구를 골라요');
+    toast(`💡 WASD로 이동하고, 1~${HOTBAR_SIZE} 키로 도구를 골라요`);
     setTimeout(() => toast('💡 머리 위에 ❗가 있는 사람에게 말을 걸어 보세요'), 3200);
     setTimeout(() => toast('💡 📜 퀘스트 창에서 "위치 표시"를 누르면 길을 알려 줘요'), 6400);
   } else {
@@ -223,8 +223,8 @@ function onKey(code) {
     return;
   }
   if (G.ui.fading || G.mode !== 'play') return;
-  const m = code.match(/^Digit([1-5])$/);
-  if (m) InventorySystem.select('hotbar', Number(m[1]) - 1);
+  const m = code.match(/^Digit([1-9])$/);
+  if (m && Number(m[1]) <= HOTBAR_SIZE) InventorySystem.select('hotbar', Number(m[1]) - 1);
   else if (code === 'KeyI' || code === 'Tab') InventoryUI.open();
   else if (code === 'KeyQ') QuestUI.open();
   else if (code === 'KeyE') interactNearest();

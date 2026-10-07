@@ -724,11 +724,151 @@ export function makeEasel() {
 }
 
 // ═════════════════════════════════════════════════════════════
-//  캐릭터 (키 약 1.6m, 다리가 짧고 통통한 동글동글 체형)
+//  캐릭터 (키 약 1.6m, 머리가 큰 2.5등신 — 매끈하게 이어진 장난감 인형 느낌)
+//  몸통·다리·팔은 이음매 없는 회전체(Lathe), 얼굴은 머리에 그려 넣은 텍스처,
+//  머리카락은 머리를 감싸는 한 덩어리 껍질
 // ═════════════════════════════════════════════════════════════
 
+/** 캐릭터 전체 크기 배율 (body 그룹에 적용 — 탈것은 root 에 붙으므로 커지지 않음) */
+const CHAR_SCALE = 1.18;
 /** 앉았을 때 엉덩이 바닥 높이 (탈것 좌석 높이 계산용) */
-export const CHAR_SIT_HEIGHT = 0.68;
+export const CHAR_SIT_HEIGHT = 0.46 * CHAR_SCALE;
+
+/** 회전체. 단면은 위→아래, 아래→위 어느 쪽으로 적어도 된다 (면이 바깥을 보도록 아래→위로 맞춤) */
+const lathe = (key, pts, seg = 28) => geo(key, () => {
+  const ordered = pts[0][1] > pts[pts.length - 1][1] ? [...pts].reverse() : pts;
+  const g = new THREE.LatheGeometry(ordered.map(([x, y]) => new THREE.Vector2(x, y)), seg);
+  g.computeVertexNormals();
+  return g;
+});
+
+// 머리 내부 좌표는 반지름 0.36 기준 (모자 좌표와 같음)
+const HEAD_R = 0.36;
+const FACE_R = 0.362;
+
+/** 얼굴(눈·눈썹·볼터치·입)을 그린 캔버스 텍스처 — 정면에서 평면 투영 */
+const faceTexCache = new Map();
+function faceTexture(browColor) {
+  if (faceTexCache.has(browColor)) return faceTexCache.get(browColor);
+  const S = 512;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const ctx = cv.getContext('2d');
+  // 머리 좌표(x, y) → 캔버스 픽셀
+  const px = (x) => (x / FACE_R * 0.5 + 0.5) * S;
+  const py = (y) => (0.5 - y / FACE_R * 0.5) * S;
+  const u = S / (FACE_R * 2); // 머리 좌표 1 당 픽셀
+
+  // 볼터치
+  for (const sx of [-1, 1]) {
+    const g = ctx.createRadialGradient(px(sx * 0.2), py(-0.085), 0, px(sx * 0.2), py(-0.085), 0.075 * u);
+    g.addColorStop(0, 'rgba(240,120,110,0.55)');
+    g.addColorStop(1, 'rgba(240,120,110,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(px(sx * 0.2), py(-0.085), 0.075 * u, 0.05 * u, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 동그랗고 큰 눈: 흰자 + 갈색 눈동자 + 반짝임
+  for (const sx of [-1, 1]) {
+    const ex = px(sx * 0.125), ey = py(0.0);
+    ctx.fillStyle = '#fbfaf6';
+    ctx.strokeStyle = '#3a2418';
+    ctx.lineWidth = 0.009 * u;
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, 0.058 * u, 0.066 * u, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#5a3420';
+    ctx.beginPath();
+    ctx.ellipse(ex - sx * 0.006 * u, ey + 0.006 * u, 0.04 * u, 0.047 * u, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#24140c';
+    ctx.beginPath();
+    ctx.ellipse(ex - sx * 0.006 * u, ey + 0.008 * u, 0.024 * u, 0.029 * u, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(ex + 0.012 * u, ey - 0.02 * u, 0.013 * u, 0, Math.PI * 2);
+    ctx.fill();
+    // 눈썹: 짧고 둥근 호
+    ctx.strokeStyle = '#' + browColor.toString(16).padStart(6, '0');
+    ctx.lineWidth = 0.016 * u;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(ex, py(0.085) + 0.06 * u, 0.06 * u, Math.PI * 1.32, Math.PI * 1.68);
+    ctx.stroke();
+  }
+  // 입: 살짝 웃는 곡선
+  ctx.strokeStyle = '#7a3a30';
+  ctx.lineWidth = 0.013 * u;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(px(0), py(-0.125), 0.05 * u, Math.PI * 0.18, Math.PI * 0.82);
+  ctx.stroke();
+
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  faceTexCache.set(browColor, t);
+  return t;
+}
+
+/** 얼굴 앞쪽을 덮는 얇은 껍질 — UV를 정면(xy) 평면 투영으로 다시 계산 */
+const faceShellGeo = () => geo('faceShell', () => {
+  const g = new THREE.SphereGeometry(FACE_R, 40, 28, 0, Math.PI, Math.PI * 0.18, Math.PI * 0.62);
+  const p = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / FACE_R * 0.5 + 0.5, p.getY(i) / FACE_R * 0.5 + 0.5);
+  return g;
+});
+
+/**
+ * 머리카락: 머리를 감싸는 구 껍질 하나. hairline(방위각 a, 0 = 정면)보다 아래의 정점은
+ * 머리 속으로 밀어 넣어 숨긴다 → 이음매 없이 한 덩어리로 덮인 헬멧 같은 머리
+ * mask(a, y) 가 true 인 정점만 머리카락으로 남는다
+ */
+function hairShellGeo(key, mask, R = 0.385) {
+  return geo('hair:' + key, () => {
+    const g = new THREE.SphereGeometry(R, 96, 64);
+    const p = g.attributes.position;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) {
+      v.fromBufferAttribute(p, i);
+      const a = Math.atan2(v.x, v.z);
+      const y = v.y / R;
+      // mask 는 머리카락 안쪽일수록 큰 값(경계 = 0)을 돌려준다 → 경계에서 둥글게 말려 들어감
+      const k = smooth(-0.05, 0.03, mask(a, y));
+      v.multiplyScalar(0.8 + 0.2 * Math.sqrt(k));
+      v.y += Math.max(0, y) * 0.03 * k; // 정수리를 살짝 봉긋하게
+      p.setXYZ(i, v.x, v.y, v.z);
+    }
+    g.computeVertexNormals();
+    return g;
+  });
+}
+
+const smooth = (e0, e1, x) => {
+  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+};
+/** 앞머리(둥근 물결) → 옆머리 → 뒷머리로 내려가는 머리선 높이 (y / R) */
+function bangsLine(a, front = 0.32, back = -0.55) {
+  const s = Math.abs(a);
+  const wave = 0.07 * Math.abs(Math.sin(a * 5.2));
+  const f = front + wave;
+  const side = 0.02;
+  if (s < 1.1) return f + (side - f) * smooth(0.55, 1.1, s);
+  return side + (back - side) * smooth(1.3, 2.6, s);
+}
+
+// 머리카락 영역 함수: 양수 = 머리카락, 0 = 머리선
+const HAIR_MASKS = {
+  short: (a, y) => y - bangsLine(a),
+  // 앞머리 없이 뒤로 넘긴 머리
+  bun: (a, y) => y - bangsLine(a, 0.52, -0.5) + 0.07 * Math.abs(Math.sin(a * 5.2)),
+  // 정수리는 비고 옆·뒤에만 남은 머리
+  bald: (a, y) => Math.min((Math.abs(a) - 1.25) * 0.4, 0.25 - y, y + 0.5),
+};
 
 /**
  * look: { skin, top, bottom, hair, hairStyle, beard, glasses, cap, hatStraw, scale }
@@ -737,219 +877,159 @@ export const CHAR_SIT_HEIGHT = 0.68;
 export function makeCharacter(look = {}) {
   const root = new THREE.Group();
   const body = new THREE.Group();
+  body.scale.setScalar(CHAR_SCALE);
   root.add(body);
 
-  const skinM = mat(look.skin ?? 0xf0c4a0, { roughness: 0.7 });
+  const skinM = mat(look.skin ?? 0xf0c4a0, { roughness: 0.62 });
   const fab = TX.fabricTex();
   const topM = new THREE.MeshStandardMaterial({ color: look.top ?? 0xf2ede2, map: fab.map, roughness: 0.85 });
   const botM = new THREE.MeshStandardMaterial({ color: look.bottom ?? 0x5e7aa8, map: fab.map, roughness: 0.85 });
-  const shoeM = mat(0x6a4630, { roughness: 0.6 });
+  const shoeM = mat(0x6a4630, { roughness: 0.55 });
+  const soleM = mat(0xf2ece0, { roughness: 0.7 });
 
-  // 다리: 엉덩이 관절에서 회전. 굵고 둥근 허벅지 → 무릎 → 정강이 + 동그란 신발
+  // 다리: 엉덩이 관절에서 회전. 짧고 통통한 한 덩어리 + 동글동글한 신발
   const legs = [];
   for (const sx of [-1, 1]) {
     const pivot = new THREE.Group();
-    pivot.position.set(sx * 0.13, 0.72, 0);
-    const hipBall = mesh(sphere(0.118, 18, 14), botM);
-    const thigh = mesh(cyl(0.118, 0.1, 0.3, 18), botM);
-    thigh.position.y = -0.15;
-    const knee = mesh(sphere(0.098, 16, 12), botM);
-    knee.position.y = -0.3;
-    const shin = mesh(cyl(0.097, 0.084, 0.3, 18), botM);
-    shin.position.y = -0.45;
-    const shoe = mesh(sphere(0.112, 18, 12), shoeM);
-    shoe.scale.set(1.0, 0.62, 1.42);
-    shoe.position.set(0, -0.652, 0.04);
-    pivot.add(hipBall, thigh, knee, shin, shoe);
+    pivot.position.set(sx * 0.095, 0.5, 0);
+    const leg = mesh(lathe('leg5', [
+      [0, 0.07], [0.06, 0.062], [0.094, 0.03], [0.104, -0.02], [0.1, -0.14], [0.092, -0.28], [0.086, -0.37], [0.05, -0.405], [0, -0.41],
+    ], 22), botM);
+    const shoe = mesh(sphere(0.1, 20, 14), shoeM);
+    shoe.scale.set(1.05, 0.66, 1.42);
+    shoe.position.set(0, -0.435, 0.035);
+    const sole = mesh(cyl(0.098, 0.1, 0.025, 20), soleM);
+    sole.scale.set(1.05, 1, 1.4);
+    sole.position.set(0, -0.488, 0.035);
+    pivot.add(leg, shoe, sole);
     body.add(pivot);
     legs.push(pivot);
   }
 
-  // 골반: 몸통 아랫단과 두 허벅지를 잇는 둥근 원기둥
-  const pelvis = mesh(cyl(0.235, 0.245, 0.16, 28), botM);
-  pelvis.scale.z = 0.82;
-  pelvis.position.y = 0.76;
-  const belt = mesh(cyl(0.24, 0.24, 0.05, 28), mat(0x5a3e2a, { roughness: 0.6 }));
-  belt.scale.z = 0.82;
-  belt.position.y = 0.83;
-  body.add(pelvis, belt);
+  // 몸통: 바지(아래) + 윗옷(위)이 같은 단면으로 이어진 통통한 콩 모양.
+  // 윗옷 밑단이 바지보다 살짝 넓어 옷이 겹쳐 입혀진 것처럼 보인다
+  const pelvis = mesh(lathe('pelvis5', [
+    [0, 0.4], [0.1, 0.405], [0.165, 0.43], [0.2, 0.47], [0.213, 0.52], [0.214, 0.6], [0.2, 0.64],
+  ]), botM);
+  pelvis.scale.z = 0.84;
+  body.add(pelvis);
 
-  const skirt = mesh(cyl(0.245, 0.37, 0.4, 26), botM);
-  skirt.position.y = 0.6;
+  const skirt = mesh(lathe('skirt5', [[0.2, 0.6], [0.225, 0.55], [0.27, 0.44], [0.3, 0.33], [0.29, 0.315]]), botM);
+  skirt.scale.z = 0.88;
   skirt.visible = false;
   body.add(skirt);
 
-  // 몸통: 짧고 통통하며 어깨가 둥근 단면
-  const torso = mesh(geo('torso4', () => new THREE.LatheGeometry([
-    [0, 0], [0.235, 0], [0.246, 0.06], [0.24, 0.16], [0.25, 0.26], [0.26, 0.35],
-    [0.258, 0.4], [0.232, 0.455], [0.15, 0.49], [0.072, 0.502], [0, 0.502],
-  ].map(([x, y]) => new THREE.Vector2(x, y)), 28)), topM);
+  const torso = mesh(lathe('torso5', [
+    [0.205, 0.555], [0.226, 0.565], [0.232, 0.6], [0.23, 0.68], [0.22, 0.77], [0.2, 0.85],
+    [0.168, 0.915], [0.115, 0.965], [0.06, 0.99], [0, 0.998],
+  ]), topM);
   torso.scale.z = 0.84;
-  torso.position.y = 0.78;
   body.add(torso);
-  const collar = mesh(geo('collar4', () => new THREE.TorusGeometry(0.076, 0.024, 8, 22)), topM);
-  collar.rotation.x = Math.PI / 2;
-  collar.position.y = 1.28;
-  const neck = mesh(cyl(0.066, 0.072, 0.1, 16), skinM);
-  neck.position.y = 1.32;
-  body.add(collar, neck);
 
-  // 팔: 어깨 관절에서 회전. 굵고 둥근 소매 + 동그란 손
+  // 팔: 어깨 관절에서 회전. 몸통 속에서 뻗어 나오는 둥근 반소매 + 팔 + 동그란 주먹손 (손이 엉덩이 높이까지 내려옴)
   const arms = [];
   for (const sx of [-1, 1]) {
     const pivot = new THREE.Group();
-    pivot.position.set(sx * 0.285, 1.2, 0);
-    pivot.rotation.z = sx * 0.1;
-    const shoulder = mesh(sphere(0.096, 18, 14), topM);
-    const upper = mesh(cyl(0.09, 0.078, 0.24, 16), topM);
-    upper.position.y = -0.12;
-    const elbow = mesh(sphere(0.077, 14, 10), topM);
-    elbow.position.y = -0.24;
-    const fore = mesh(cyl(0.076, 0.066, 0.2, 16), topM);
-    fore.position.y = -0.34;
-    const cuff = mesh(geo('cuff4', () => new THREE.TorusGeometry(0.064, 0.016, 6, 18)), topM);
-    cuff.rotation.x = Math.PI / 2;
-    cuff.position.y = -0.44;
-    const hand = mesh(sphere(0.074, 16, 12), skinM);
-    hand.scale.set(0.92, 1.0, 0.78);
-    hand.position.y = -0.5;
-    const thumb = mesh(sphere(0.029, 10, 8), skinM);
-    thumb.position.set(-sx * 0.056, -0.48, 0.02);
-    pivot.add(shoulder, upper, elbow, fore, cuff, hand, thumb);
+    pivot.position.set(sx * 0.15, 0.84, 0);
+    pivot.rotation.z = sx * 0.36;
+    // 소매 윗부분은 몸통 속에 묻혀 어깨에서 자연스럽게 이어진다
+    const sleeve = mesh(lathe('sleeve6', [
+      [0, 0.03], [0.06, 0.02], [0.084, -0.01], [0.087, -0.1], [0.089, -0.135], [0.072, -0.142],
+    ], 20), topM);
+    const arm = mesh(capsule(0.056, 0.25), skinM);
+    arm.position.y = -0.2;
+    const hand = mesh(sphere(0.074, 18, 14), skinM);
+    hand.scale.set(1, 0.98, 0.92);
+    hand.position.y = -0.38;
+    pivot.add(sleeve, arm, hand);
     body.add(pivot);
     arms.push(pivot);
   }
   const handSlot = new THREE.Group();
-  handSlot.position.set(0, -0.54, 0.02);
+  handSlot.position.set(0, -0.41, 0.02);
   arms[1].add(handSlot);
 
-  // 머리: 내부 좌표는 반지름 0.36 기준(모자 좌표와 같음), 그룹 스케일로 크기 조절 — 조금 크고 동그랗게
+  // 머리: 몸통 위에 목 없이 바로 얹힌 큰 머리 (내부 좌표 반지름 0.36, 그룹 스케일로 크기 조절)
   const head = new THREE.Group();
-  head.position.y = 1.47;
-  head.scale.setScalar(0.43);
+  head.position.y = 1.245;
+  head.scale.setScalar(0.9);
   body.add(head);
-  const skull = mesh(sphere(0.36, 32, 24), skinM);
-  skull.scale.set(0.94, 1, 0.96);
-  const jaw = mesh(sphere(0.28, 28, 18), skinM);
-  jaw.scale.set(0.82, 0.7, 0.88);
-  jaw.position.set(0, -0.12, 0.05);
-  head.add(skull, jaw);
-  const scleraM = mat(0xfaf8f4, { roughness: 0.3 });
-  const irisM = mat(0x2a1c14, { roughness: 0.15 });
-  const shineM = mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.5 });
-  const browM = mat(look.hair ?? 0x3a2618, { roughness: 0.8 });
-  const blushM = mat(0xf09a8c, { roughness: 0.9, transparent: true, opacity: 0.45 });
+  const face = new THREE.Group(); // 두상 비율 (조금 넓적한 동그라미)
+  face.scale.set(1.04, 0.96, 0.98);
+  head.add(face);
+  const skull = mesh(sphere(HEAD_R, 40, 30), skinM);
+  const faceM = new THREE.MeshStandardMaterial({
+    map: faceTexture(look.hair ?? 0x3a2618), transparent: true, depthWrite: false, roughness: 0.62,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  });
+  const facePaint = mesh(faceShellGeo(), faceM, false);
+  face.add(skull, facePaint);
   for (const sx of [-1, 1]) {
-    const sclera = mesh(sphere(0.06, 14, 10), scleraM, false);
-    sclera.scale.set(1.0, 1.25, 0.5);
-    sclera.position.set(sx * 0.12, 0.02, 0.31);
-    const iris = mesh(sphere(0.046, 14, 10), irisM, false);
-    iris.scale.set(0.9, 1.1, 0.4);
-    iris.position.set(sx * 0.12, 0.015, 0.325);
-    const shine = mesh(sphere(0.014, 8, 6), shineM, false);
-    shine.position.set(sx * 0.12 + 0.016, 0.05, 0.345);
-    const brow = mesh(capsule(0.012, 0.07), browM, false);
-    brow.rotation.z = Math.PI / 2 + sx * 0.12;
-    brow.position.set(sx * 0.125, 0.13, 0.305);
-    const blush = mesh(sphere(0.06, 12, 8), blushM, false);
-    blush.scale.set(1.2, 0.7, 0.3);
-    blush.position.set(sx * 0.2, -0.08, 0.265);
-    const ear = mesh(sphere(0.07, 14, 10), skinM);
-    ear.scale.set(0.5, 1, 0.75);
-    ear.position.set(sx * 0.325, -0.02, -0.01);
-    head.add(sclera, iris, shine, brow, blush, ear);
+    const ear = mesh(sphere(0.075, 16, 12), skinM);
+    ear.scale.set(0.5, 0.9, 0.72);
+    ear.position.set(sx * 0.345, -0.03, -0.01);
+    face.add(ear);
   }
-  const nose = mesh(sphere(0.05, 14, 10), skinM);
-  nose.scale.set(1, 0.85, 0.8);
-  nose.position.set(0, -0.055, 0.335);
-  const mouth = mesh(geo('smile', () => new THREE.TorusGeometry(0.042, 0.01, 6, 14, Math.PI)), mat(0x8a4a3e, { roughness: 0.6 }), false);
-  mouth.rotation.z = Math.PI;
-  mouth.position.set(0, -0.135, 0.318);
-  head.add(nose, mouth);
+  const nose = mesh(sphere(0.042, 16, 12), skinM);
+  nose.scale.set(1.1, 0.9, 0.8);
+  nose.position.set(0, -0.06, 0.352);
+  face.add(nose);
   if (look.glasses) {
     const gM = mat(0x2a2420, { roughness: 0.4, metalness: 0.3 });
     for (const sx of [-1, 1]) {
-      const ring = mesh(geo('glass2', () => new THREE.TorusGeometry(0.075, 0.009, 6, 24)), gM, false);
-      ring.position.set(sx * 0.115, 0.03, 0.345);
-      const temple = mesh(cyl(0.007, 0.007, 0.3, 5), gM, false);
+      const ring = mesh(geo('glass3', () => new THREE.TorusGeometry(0.082, 0.01, 6, 24)), gM, false);
+      ring.position.set(sx * 0.125, 0.0, 0.365);
+      const temple = mesh(cyl(0.008, 0.008, 0.3, 5), gM, false);
       temple.rotation.x = Math.PI / 2;
-      temple.position.set(sx * 0.2, 0.04, 0.2);
-      head.add(ring, temple);
+      temple.position.set(sx * 0.22, 0.02, 0.21);
+      face.add(ring, temple);
     }
-    const bridge = mesh(cyl(0.008, 0.008, 0.08, 5), gM, false);
+    const bridge = mesh(cyl(0.009, 0.009, 0.06, 5), gM, false);
     bridge.rotation.z = Math.PI / 2;
-    bridge.position.set(0, 0.05, 0.35);
-    head.add(bridge);
+    bridge.position.set(0, 0.02, 0.372);
+    face.add(bridge);
   }
 
-  const hairM = mat(look.hair ?? 0x2a1e16, { roughness: 0.65 });
+  const hairM = mat(look.hair ?? 0x2a1e16, { roughness: 0.6 });
   if (look.beard) {
     const beardM = mat(look.beard, { roughness: 0.9 });
-    const b = mesh(sphere(0.29, 20, 14), beardM);
-    b.scale.set(0.84, 0.66, 0.78);
-    b.position.set(0, -0.2, 0.08);
-    const mustache = mesh(capsule(0.03, 0.12), beardM);
+    const b = mesh(sphere(0.3, 24, 16), beardM);
+    b.scale.set(0.9, 0.62, 0.8);
+    b.position.set(0, -0.2, 0.09);
+    const mustache = mesh(capsule(0.032, 0.12), beardM);
     mustache.rotation.z = Math.PI / 2;
-    mustache.position.set(0, -0.13, 0.31);
-    head.add(b, mustache);
+    mustache.position.set(0, -0.115, 0.33);
+    face.add(b, mustache);
   }
   const hair = new THREE.Group();
-  head.add(hair);
+  face.add(hair);
   const style = look.hairStyle ?? 'short';
-  if (style !== 'bald') {
-    const cap = mesh(geo('haircap2', () => new THREE.SphereGeometry(0.38, 28, 16, 0, Math.PI * 2, 0, Math.PI * 0.56)), hairM);
-    cap.scale.set(0.98, 1.02, 1);
-    cap.position.y = 0.02;
-    cap.rotation.x = -0.5;
-    hair.add(cap);
-    for (const sx of [-1, 1]) {
-      const side = mesh(sphere(0.12, 12, 8), hairM);
-      side.scale.set(0.5, 1, 0.9);
-      side.position.set(sx * 0.315, 0.04, -0.05);
-      hair.add(side);
-    }
-    // 둥근 앞머리
-    for (const [x, r] of [[-0.15, 0.11], [-0.04, 0.12], [0.07, 0.12], [0.17, 0.1]]) {
-      const lock = mesh(sphere(r, 12, 8), hairM);
-      lock.scale.set(1.1, 0.7, 0.55);
-      lock.position.set(x, 0.2 - Math.abs(x) * 0.2, 0.28 - Math.abs(x) * 0.25);
-      hair.add(lock);
-    }
-  } else {
-    for (const sx of [-1, 1]) {
-      const side = mesh(sphere(0.13, 12, 8), hairM);
-      side.scale.set(0.45, 0.8, 1.1);
-      side.position.set(sx * 0.29, 0.02, -0.1);
-      hair.add(side);
-    }
-    const back = mesh(sphere(0.2, 16, 10), hairM);
-    back.scale.set(1.3, 0.6, 0.6);
-    back.position.set(0, -0.02, -0.26);
-    hair.add(back);
-  }
+  const maskKey = HAIR_MASKS[style] ? style : 'short';
+  hair.add(mesh(hairShellGeo(maskKey, HAIR_MASKS[maskKey]), hairM));
   if (style === 'bun') {
-    const bun = mesh(sphere(0.15, 16, 12), hairM);
-    bun.position.set(0, 0.24, -0.27);
+    const bun = mesh(sphere(0.15, 18, 14), hairM);
+    bun.position.set(0, 0.26, -0.27);
     hair.add(bun);
   } else if (style === 'pigtail') {
     for (const sx of [-1, 1]) {
-      const tail = mesh(capsule(0.07, 0.28), hairM);
-      tail.position.set(sx * 0.3, -0.2, -0.16);
-      tail.rotation.z = sx * 0.2;
-      const tie = mesh(geo('tie', () => new THREE.TorusGeometry(0.06, 0.018, 6, 14)), mat(0xb03040, { roughness: 0.5 }));
-      tie.rotation.x = Math.PI / 2;
-      tie.position.set(sx * 0.29, -0.02, -0.16);
+      const tail = mesh(capsule(0.085, 0.2), hairM);
+      tail.position.set(sx * 0.36, -0.12, -0.12);
+      tail.rotation.z = sx * 0.35;
+      const tie = mesh(geo('tie2', () => new THREE.TorusGeometry(0.07, 0.022, 8, 16)), mat(0xd04050, { roughness: 0.5 }));
+      tie.rotation.set(Math.PI / 2, 0, sx * 0.35);
+      tie.position.set(sx * 0.32, 0.0, -0.12);
       hair.add(tail, tie);
     }
   } else if (style === 'long') {
-    const back = mesh(capsule(0.3, 0.5), hairM);
-    back.scale.set(0.95, 1, 0.42);
-    back.position.set(0, -0.28, -0.2);
+    // 뒷머리: 위쪽은 머리 껍질 속에 묻히고, 아래로 갈수록 그 곡면을 그대로 이어 내려온다
+    const back = mesh(lathe('longHair3', [[0, 0.25], [0.33, 0.15], [0.37, 0.0], [0.365, -0.2], [0.335, -0.4], [0.27, -0.53], [0, -0.57]], 32), hairM);
+    back.scale.set(1.0, 1, 0.72);
+    back.position.set(0, 0, -0.1);
     hair.add(back);
   }
 
   const hatSlot = new THREE.Group();
-  head.add(hatSlot);
+  face.add(hatSlot);
   if (look.cap) hatSlot.add(makeHat('cap', look.cap));
   if (look.hatStraw) hatSlot.add(makeHat('straw', look.hatStraw));
 
@@ -1056,13 +1136,13 @@ export function makeHeldItem(item, toolColor = 0x8a7b6a) {
     const metal = surf('metal', toolColor, { roughness: 0.38 });
     if (item.toolKind === 'hoe') {
       // 손잡이 끝을 쥐고, 앞쪽 끝의 날이 땅(아래)을 향함
-      const h = mesh(cyl(0.017, 0.02, 1.1, 10), stick);
+      const h = mesh(cyl(0.017, 0.02, 0.72, 10), stick);
       h.rotation.x = Math.PI / 2;
-      h.position.z = 0.42;
+      h.position.z = 0.26;
       const neck = mesh(cyl(0.014, 0.014, 0.14, 6), metal);
-      neck.position.set(0, -0.05, 0.97);
+      neck.position.set(0, -0.05, 0.6);
       const blade = mesh(rbox(0.2, 0.15, 0.012, 0.004), metal);
-      blade.position.set(0, -0.15, 0.95);
+      blade.position.set(0, -0.15, 0.58);
       blade.rotation.x = -0.35;
       g.add(h, neck, blade);
       g.rotation.x = 0.35;

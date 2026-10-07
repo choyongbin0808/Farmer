@@ -1,4 +1,5 @@
 import { AudioManager } from '../core/AudioManager.js';
+import { HOTBAR_SIZE } from '../core/Game.js';
 import { prologueComicHTML } from './PrologueComic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -26,7 +27,7 @@ export const TitleUI = {
           <button class="btn big" data-act="continue" ${hasSave ? '' : 'disabled'}>이어하기</button>
           <button class="btn big" data-act="settings">설정</button>
         </div>
-        <div class="title-hint">WASD 이동 · 클릭 상호작용 · 1~5 핫바</div>
+        <div class="title-hint">WASD 이동 · 클릭 상호작용 · 1~${HOTBAR_SIZE} 핫바</div>
       </div>`;
     el.querySelector('[data-act="new"]').onclick = () => {
       AudioManager.resume();

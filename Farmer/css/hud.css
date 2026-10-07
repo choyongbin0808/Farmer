@@ -118,6 +118,11 @@
 .slot:hover { transform: translateY(-2px); border-color: var(--line-strong); }
 .slot.selected { border: 3px solid var(--gold); box-shadow: 0 0 0 3px rgba(230, 169, 58, 0.3); background: #fff6d2; }
 .slot.dim { opacity: 0.3; }
+/* 농기구 고정 칸 (핫바 1~3): 살짝 다른 바탕 + 자물쇠, 고정 칸 뒤에 간격 */
+.slot.fixed { background: #f3ecd8; }
+.slot.fixed.selected { background: #fff6d2; }
+.slot.fixed::after { content: '🔒'; position: absolute; top: 2px; right: 4px; font-size: 9px; opacity: 0.55; }
+.slot.fixed + .slot:not(.fixed) { margin-left: 8px; }
 .slot .key {
   position: absolute;
   top: 2px;

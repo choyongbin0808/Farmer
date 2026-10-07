@@ -1,4 +1,4 @@
-import { G, FARM_MAX, createNewState, newPlot, newBag } from './Game.js';
+import { G, FARM_MAX, HOTBAR_SIZE, FIXED_HOTBAR, createNewState, newPlot, newBag, newHotbar } from './Game.js';
 import { GEAR, TOOL_ORDER, startingGear } from '../data/tools.js';
 import { getItem } from '../data/items.js';
 import { bagAreaOf } from '../systems/InventorySystem.js';
@@ -78,6 +78,24 @@ function migrateBag(data) {
   delete data.inventory;
 }
 
+/**
+ * 핫바를 7칸으로 맞추고 1~3칸에 호미·물뿌리개·낫을 고정한다.
+ * 다른 곳에 있던 농기구는 고정 칸으로 모으고, 나머지 아이템은 4번 칸부터 → 넘치면 가방으로
+ */
+function migrateHotbar(data) {
+  const isTool = (s) => s && FIXED_HOTBAR.includes(s.id);
+  const rest = (data.hotbar || []).filter((s) => s && !isTool(s));
+  if (data.bag) for (const list of Object.values(data.bag)) list.forEach((s, i) => { if (isTool(s)) list[i] = null; });
+  const hotbar = newHotbar();
+  for (let i = FIXED_HOTBAR.length; i < HOTBAR_SIZE && rest.length; i++) hotbar[i] = rest.shift();
+  for (const s of rest) {
+    const list = data.bag?.[bagAreaOf(s.id)];
+    const i = list ? list.indexOf(null) : -1;
+    if (i >= 0) list[i] = s;
+  }
+  data.hotbar = hotbar;
+}
+
 export function loadGame() {
   const raw = localStorage.getItem(KEY);
   if (!raw) return null;
@@ -86,6 +104,7 @@ export function loadGame() {
     migrateFarm(data);
     migrateTools(data);
     migrateBag(data);
+    migrateHotbar(data);
     return mergeDefaults(data, createNewState(data.player?.name || '귀농인'));
   } catch (e) {
     console.warn('세이브 데이터를 불러오지 못했습니다.', e);

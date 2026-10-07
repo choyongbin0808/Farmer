@@ -1,4 +1,4 @@
-import { G, FARM_MAX } from '../core/Game.js';
+import { G, FARM_MAX, HOTBAR_SIZE } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { CROPS } from '../data/crops.js';
@@ -77,7 +77,7 @@ export const FarmSystem = {
     const held = InventorySystem.getHeld();
     const item = held?.item;
     if (!item) {
-      toast('핫바(1~5)에서 도구나 씨앗을 골라 주세요');
+      toast(`핫바(1~${HOTBAR_SIZE})에서 도구나 씨앗을 골라 주세요`);
       return;
     }
     if (item.type === 'tool') {

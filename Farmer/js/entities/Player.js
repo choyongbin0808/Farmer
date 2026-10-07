@@ -166,7 +166,8 @@ export class Player {
     const shake = Math.sin(this.vibT * 45) * (0.008 + 0.025 * k + 0.012 * this.moving);
     v.root.position.y = shake;
     v.root.rotation.x = -k * 0.04;
-    this.pose({ a0x: -1.15, a1x: -1.15, l0x: -1.05, l1x: -1.05, bx: k * 0.08, by: VEHICLE_SEAT_Y - CHAR_SIT_HEIGHT + shake });
+    // 팔을 앞으로 뻗어 핸들을 잡는다
+    this.pose({ a0x: -1.35, a1x: -1.35, in0: 0.2, in1: 0.2, l0x: -1.2, l1x: -1.2, bx: k * 0.08, by: VEHICLE_SEAT_Y - CHAR_SIT_HEIGHT + shake });
   }
 
   /** motion: 'till' | 'water' | 'plant' | 'harvest' (WORK_POSES) */

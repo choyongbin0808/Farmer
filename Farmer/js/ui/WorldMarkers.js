@@ -88,7 +88,7 @@ export function updateMarkers(dt, t, playerPos, visible) {
     const tag = npcTags[id];
     const npc = G.refs.npcs[id];
     const d = Math.hypot(npc.pos.x - playerPos.x, npc.pos.z - playerPos.z);
-    const h = 1.95 * (NPCS[id].look.scale ?? 1);
+    const h = 2.1 * (NPCS[id].look.scale ?? 1);
     const p = project(npc.pos.x, npc.pos.y + h, npc.pos.z);
     const qIcon = G.mode === 'play' ? QuestSystem.npcIcon(id) : null;
     const icon = qIcon || (d < 5 && G.mode === 'play' ? '💬' : '');

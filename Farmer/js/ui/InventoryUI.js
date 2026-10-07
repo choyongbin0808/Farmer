@@ -163,9 +163,10 @@ function gridHTML() {
 }
 
 function hotbarHTML() {
-  return `<div class="inv-hotbar-label">핫바 (1~5)</div><div class="inv-hotbar">${G.state.hotbar.map((s, i) => {
+  return `<div class="inv-hotbar-label">핫바 (1~${G.state.hotbar.length}) · 1~3번 칸은 농기구 고정</div><div class="inv-hotbar">${G.state.hotbar.map((s, i) => {
     const selected = sel?.area === 'hotbar' && sel.index === i ? 'selected' : '';
-    return `<div class="slot ${selected}" data-area="hotbar" data-index="${i}"><span class="key">${i + 1}</span><div class="slot-inner">${slotHTML(s)}</div></div>`;
+    const fixed = InventorySystem.isFixed('hotbar', i) ? 'fixed' : '';
+    return `<div class="slot ${selected} ${fixed}" data-area="hotbar" data-index="${i}"><span class="key">${i + 1}</span><div class="slot-inner">${slotHTML(s)}</div></div>`;
   }).join('')}</div>`;
 }
 
@@ -173,10 +174,11 @@ function onSlotClick(area, index) {
   if (sel && !(sel.area === area && sel.index === index)) {
     const cross = sel.area !== area || area === 'hotbar';
     const from = InventorySystem.slots(sel.area)[sel.index];
-    if (cross && from) {
+    // 고정 칸(농기구)을 고른 상태에서 다른 칸을 누르면 옮기지 않고 그 칸을 고른다
+    if (cross && from && !InventorySystem.isFixed(sel.area, sel.index)) {
       if (!InventorySystem.swap(sel.area, sel.index, area, index)) {
         AudioManager.sfx('error');
-        toast('그 아이템은 이 가방 칸에 넣을 수 없어요', 'warn');
+        toast(InventorySystem.isFixed(area, index) ? '핫바 1~3번 칸은 농기구 고정 칸이에요' : '그 아이템은 이 가방 칸에 넣을 수 없어요', 'warn');
         return;
       }
       sel = { area, index };
