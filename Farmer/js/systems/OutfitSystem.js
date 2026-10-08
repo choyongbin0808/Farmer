@@ -61,6 +61,40 @@ export const OutfitSystem = {
     EventBus.emit('outfit');
   },
 
+  isWorn(id) {
+    const c = CLOTHES[id];
+    return !!c && G.state.player.outfit[c.slot] === id;
+  },
+
+  /** 상점·대장간에서 다시 살 수 있는 옷인지 (아니면 팔면 다시 못 얻는다) */
+  canRebuy(id) {
+    return !!CLOTHES[id]?.shop;
+  },
+
+  /** 판매가: 파는 옷은 구매가의 절반, 보상 옷은 최대 체력 보너스 × 20원 */
+  sellPrice(id) {
+    const c = CLOTHES[id];
+    return c.price ? Math.floor(c.price / 2) : c.stamina * 20;
+  },
+
+  sell(id) {
+    const c = CLOTHES[id];
+    if (!c || !this.owns(id)) return false;
+    if (this.isWorn(id)) {
+      AudioManager.sfx('error');
+      toast('입고 있는 옷은 팔 수 없어요', 'warn');
+      return false;
+    }
+    const money = this.sellPrice(id);
+    G.state.ownedClothes = G.state.ownedClothes.filter((o) => o !== id);
+    G.state.player.money += money;
+    AudioManager.sfx('coin');
+    toast(`${c.icon} ${c.name}을(를) 팔았어요 (+${money.toLocaleString()}원)`, 'good');
+    EventBus.emit('outfit');
+    EventBus.emit('money');
+    return true;
+  },
+
   equip(id) {
     const c = CLOTHES[id];
     if (!c || !this.owns(id)) return;

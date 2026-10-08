@@ -72,6 +72,9 @@ const WORK_POSES = {
 };
 WORK_POSES.swing = (k) => ({ a1x: -Math.sin(k * Math.PI) * 2.0, bx: Math.sin(k * Math.PI) * 0.15 });
 
+/** 동작 한 번의 길이(초) — 작업 시간이 길면 이 동작을 여러 번 반복한다 */
+const MOTION_LEN = { till: 0.8, water: 1.2, plant: 0.45, harvest: 0.85, swing: 0.6 };
+
 export function lerpAngle(a, b, t) {
   let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
   if (d < -Math.PI) d += Math.PI * 2;
@@ -170,17 +173,27 @@ export class Player {
     this.pose({ a0x: -1.35, a1x: -1.35, in0: 0.2, in1: 0.2, l0x: -1.2, l1x: -1.2, bx: k * 0.08, by: VEHICLE_SEAT_Y - CHAR_SIT_HEIGHT + shake });
   }
 
-  /** motion: 'till' | 'water' | 'plant' | 'harvest' (WORK_POSES) */
-  startWork(duration, cb, motion = 'swing') {
+  /**
+   * motion: 'till' | 'water' | 'plant' | 'harvest' (WORK_POSES)
+   * prop: 작업하는 동안만 손에 드는(또는 올라타는) 도구 { item, color, vehicle } — 끝나면 빈손으로 돌아간다
+   */
+  startWork(duration, cb, motion = 'swing', prop = null) {
     if (this.work) return false;
-    this.work = { t: 0, dur: duration, cb, motion };
+    const cycles = Math.max(1, Math.round(duration / (MOTION_LEN[motion] ?? 0.6)));
+    this.work = { t: 0, dur: duration, cb, motion, cycles, k: 0 };
     this.moveTarget = null;
+    this.setHeld(prop?.item ?? null, prop?.color, prop?.vehicle ?? null);
     return true;
   }
 
   moveTo(x, z, reach, cb) {
     const waypoints = farmRoute(this.pos, { x, z });
     this.moveTarget = { x, z, reach, cb, waypoints, stuck: 0, lastD: Infinity };
+  }
+
+  /** 진행 중인 작업의 진행도 0~1 (작업 중이 아니면 null) */
+  get workProgress() {
+    return this.work ? Math.min(1, this.work.t / this.work.dur) : null;
   }
 
   faceTo(x, z) {
@@ -209,10 +222,13 @@ export class Player {
     if (this.work) {
       const w = this.work;
       w.t += dt;
-      if (!this.vehicle) workPose = (WORK_POSES[w.motion] || WORK_POSES.swing)(Math.min(1, w.t / w.dur));
+      const p = Math.min(1, w.t / w.dur);
+      w.k = p >= 1 ? 1 : (p * w.cycles) % 1;
+      if (!this.vehicle) workPose = (WORK_POSES[w.motion] || WORK_POSES.swing)(w.k);
       if (w.t >= w.dur) {
         this.work = null;
         workPose = null;
+        this.setHeld(null);
         w.cb?.();
       }
     } else if (canMove) {
@@ -292,7 +308,7 @@ export class Player {
     }
     if (workPose) {
       this.pose(workPose);
-      if (this.work?.motion === 'water') this.dripWater(dt, this.work.t / this.work.dur);
+      if (this.work?.motion === 'water') this.dripWater(dt, this.work.k);
       return;
     }
     const s = Math.sin(this.walkT) * this.moving;

@@ -122,7 +122,6 @@ async function boot() {
   MenuUI.onTitle = goTitle;
   G.refs.eatHeld = eatHeld;
 
-  for (const evt of ['held', 'inventory', 'gear']) EventBus.on(evt, updateHeldModel);
   EventBus.on('heartUp', (id) => toast(`❤️ ${NPCS[id].name}와(과) 더 친해졌어요!`, 'good'));
 
   Input.init(canvas, {
@@ -191,7 +190,7 @@ async function begin(state, isNew) {
     await DialogueSystem.intro();
     state.flags.introDone = true;
     saveGame();
-    toast(`💡 WASD로 이동하고, 1~${HOTBAR_SIZE} 키로 도구를 골라요`);
+    toast('💡 밭을 클릭하면 갈기·물 주기·수확을 알아서 해요. 심을 씨앗은 핫바에서 골라요');
     setTimeout(() => toast('💡 머리 위에 ❗가 있는 사람에게 말을 걸어 보세요'), 3200);
     setTimeout(() => toast('💡 📜 퀘스트 창에서 "위치 표시"를 누르면 길을 알려 줘요'), 6400);
   } else {
@@ -274,7 +273,6 @@ function approach(x, z, reach, cb) {
 function interactPlot(plot) {
   if (G.mode !== 'play' || isUIBlocking() || !plot.active) return;
   if (FarmSystem.showsInfo(plot)) return FarmUI.openCropInfo(plot);
-  if (plot.isReady() && !FarmSystem.holdingSickle()) return FarmSystem.needSickle();
   approach(plot.x, plot.z, 1.7, () => FarmSystem.usePlot(plot));
 }
 
@@ -318,12 +316,9 @@ function eatHeld() {
   if (h?.item.type === 'food') StaminaSystem.eat(h.area, h.index);
 }
 
+/** 평소에는 빈손 — 농기구·씨앗은 밭 작업을 하는 동안만 손에 나타난다 (Player.startWork) */
 function updateHeldModel() {
-  if (!G.state) return;
-  const item = InventorySystem.getHeldItem();
-  const tool = item?.type === 'tool';
-  const color = tool ? GearSystem.stats(item.toolKind).color : 0x8a7b6a;
-  player.setHeld(item, color, tool ? GearSystem.equipped(item.toolKind).vehicle : null);
+  if (!player.work) player.setHeld(null);
 }
 
 // ───────── 마우스 오버 미리보기 ─────────

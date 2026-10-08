@@ -12,80 +12,152 @@ import { GearSystem } from '../systems/GearSystem.js';
 import { openModal, refreshModal, tabsHTML, bindTabs } from './Panels.js';
 import { slotHTML, itemIconHTML, toast } from './HUD.js';
 import { AudioManager } from '../core/AudioManager.js';
+import { CharacterPreview } from './CharacterPreview.js';
+import { gearIconSVG } from './GearIcons.js';
 
-// 씨앗·작물·음식·기타 탭은 각자 따로 된 가방 칸(state.bag[탭])을 가진다
-const TABS = [['seed', '씨앗'], ['crop', '작물'], ['food', '음식'], ['misc', '기타'], ['tool', '장비'], ['cloth', '옷']];
-const EMPTY_TEXT = {
-  seed: '씨앗은 상점에서 살 수 있어요.',
-  crop: '수확한 작물은 창고로 들어가요. 창고에서 꺼낸 작물이 여기 담겨요.',
-  food: '음식은 상점에서 살 수 있어요. 먹으면 체력이 회복돼요.',
-  misc: '비료·성장 촉진제 같은 특별 아이템과 핫바에서 뺀 도구가 여기 담겨요.',
-};
+// 씨앗·작물·음식·물품 탭은 각자 따로 된 가방 칸(state.bag[탭])을 가진다.
+// '장비' 탭은 보유한 옷과 농기구 장비를 한 격자에 모아 보여 준다.
+const TABS = [['seed', '씨앗'], ['crop', '작물'], ['food', '음식'], ['misc', '물품'], ['equip', '장비']];
 let tab = 'seed';
-let sel = null; // { area, index }
+let sel = null; // 가방·핫바 칸 { area, index }
+let eqSel = null; // 장비 탭 선택 { kind: 'cloth' | 'gear', id }
+let sellConfirm = null; // 판매 확인 중인 장비 id
 
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
 
-function clothTooltip(id) {
-  const c = CLOTHES[id];
-  return `${c.name} · ${SLOT_NAMES[c.slot]} · 최대 체력 +${c.stamina} · ${SETS[c.setId].name} (${OutfitSystem.setProgress(c.setId)}/3)`;
+function isEqSelected(kind, id) {
+  return eqSel?.kind === kind && eqSel.id === id;
 }
 
-function previewHTML() {
-  const e = OutfitSystem.equipped();
-  const top = e.top ? hex(e.top.color) : '#f2ede2';
-  const bot = e.bottom ? hex(e.bottom.color) : '#5e7aa8';
-  const hat = e.hat ? `<div class="pv-hat pv-${e.hat.style}" style="background:${hex(e.hat.color)}"></div>` : '';
-  return `
-    <div class="char-preview">
-      ${hat}
-      <div class="pv-head"><i></i><i></i></div>
-      <div class="pv-body" style="background:${top}"></div>
-      <div class="pv-legs ${e.bottom?.skirt ? 'skirt' : ''}" style="--c:${bot}"><span></span><span></span></div>
-    </div>`;
+/** 왼쪽 착용 칸 — 옷(모자·상의·하의)과 농기구(호미·물뿌리개·낫) */
+function wornSlotHTML(s) {
+  const id = G.state.player.outfit[s];
+  const c = id && CLOTHES[id];
+  const selected = c && isEqSelected('cloth', id) ? 'selected' : '';
+  return `<div class="slot eq-slot ${c ? '' : 'empty'} ${selected}" ${c ? `data-eq="cloth" data-id="${id}"` : ''} title="${c ? c.name : SLOT_NAMES[s] + ' 비어 있음'}">
+    <div class="slot-inner">${c ? `<span class="ico">${c.icon}</span>` : `<span class="eq-ph">${SLOT_NAMES[s]}</span>`}</div>
+  </div>`;
+}
+
+function toolSlotHTML(kind) {
+  const id = GearSystem.equippedId(kind);
+  const selected = isEqSelected('gear', id) ? 'selected' : '';
+  return `<div class="slot eq-slot ${selected}" data-eq="gear" data-id="${id}" title="${GearSystem.displayName(id)}">
+    <div class="slot-inner">${gearIconHTML(id)}</div>
+  </div>`;
+}
+
+function gearIconHTML(id) {
+  const lv = GearSystem.enhanceOf(id);
+  const color = hex(GEAR[id].color);
+  return `<span class="ico">${gearIconSVG(id)}</span>${lv ? `<span class="lv" style="background:${color}">+${lv}</span>` : ''}`;
 }
 
 function leftHTML() {
-  const e = OutfitSystem.equipped();
-  const slots = SLOTS.map((s) => {
-    const c = e[s];
-    return `<div class="equip-slot ${c ? 'filled' : ''}" data-slot="${s}" title="${c ? clothTooltip(G.state.player.outfit[s]) + ' · 클릭해서 벗기' : SLOT_NAMES[s] + ' 비어 있음'}">
-      <span class="eq-label">${SLOT_NAMES[s]}</span>
-      <span class="ico">${c ? c.icon : '·'}</span>
-      <span class="eq-name">${c ? c.name : '없음'}</span>
-      <span class="eq-stat">${c ? '+' + c.stamina : ''}</span>
-    </div>`;
-  }).join('');
-
   const max = OutfitSystem.maxStamina();
   const clothes = OutfitSystem.clothesStamina();
   const setB = OutfitSystem.setStamina();
-  const activeId = OutfitSystem.activeSetId();
-  const sets = Object.entries(SETS).map(([id, s]) => {
-    const n = OutfitSystem.setProgress(id);
-    if (!n && id !== activeId) return '';
-    return `<div class="set-row ${id === activeId ? 'active' : ''}">
-      <span>${s.icon} ${s.name} <b>${n}/3</b></span>
-      <small>${id === activeId ? '발동 중 · ' : '3부위 착용 시 · '}${s.desc}</small>
-    </div>`;
-  }).join('') || '<div class="set-row empty"><small>같은 세트의 모자·상의·하의를 모두 입으면 세트 효과가 생겨요.</small></div>';
+  const active = OutfitSystem.activeSet();
+  const progress = Object.entries(SETS)
+    .map(([id, s]) => [s, OutfitSystem.setProgress(id)])
+    .filter(([, n]) => n > 0)
+    .map(([s, n]) => `<span class="set-chip ${n === 3 ? 'on' : ''}">${s.icon} ${s.name} ${n}/3</span>`).join('');
+  const tools = TOOL_ORDER.map((k) => {
+    const id = GearSystem.equippedId(k);
+    return `<div>${TOOLS[k].name} : <b>${GearSystem.displayName(id)}</b> <small>${statsText(k, GearSystem.statsOf(id))}</small></div>`;
+  }).join('');
 
   return `
-    <div class="inv-left">
-      ${previewHTML()}
-      <div class="equip-slots">${slots}</div>
-      <div class="stamina-info">
-        <div>⚡ 체력 <b>${Math.floor(G.state.player.stamina)} / ${max}</b></div>
-        <small>최대 체력 ${BASE_STAMINA} + 옷 ${clothes} + 세트 ${setB} = <b>${max}</b></small>
+    <div class="inv-left inv-frame">
+      <div class="eq-board">
+        <div class="eq-col">${SLOTS.map(wornSlotHTML).join('')}</div>
+        <div class="eq-stage" title="드래그해서 돌려 보기"><div class="eq-floor"></div><div class="char-3d"></div></div>
+        <div class="eq-col">${TOOL_ORDER.map(toolSlotHTML).join('')}</div>
       </div>
-      <div class="sets">${sets}</div>
+      <div class="eq-summary">
+        <div class="eq-sum-title">[ 현재 착용 중인 장비 ]</div>
+        <div>MAX 체력 : <b>${max}</b> <small>(기본 ${BASE_STAMINA} + 옷 ${clothes} + 세트 ${setB})</small></div>
+        <div>현재 체력 : <b>${Math.floor(G.state.player.stamina)}</b></div>
+        ${tools}
+        <div class="eq-set">세트 효과 : ${active ? `<b>${active.icon} ${active.name}</b> — ${active.desc}` : '적용 중인 세트 효과가 없어요'}</div>
+        ${progress ? `<div class="set-chips">${progress}</div>` : ''}
+      </div>
     </div>`;
 }
 
+/* ───── 장비 탭 ───── */
+
+function ownedEquipment() {
+  const clothes = [...G.state.ownedClothes]
+    .sort((a, b) => SLOTS.indexOf(CLOTHES[a].slot) - SLOTS.indexOf(CLOTHES[b].slot))
+    .map((id) => ({ kind: 'cloth', id }));
+  const gear = TOOL_ORDER.flatMap((k) => GearSystem.ownedByKind(k).map((id) => ({ kind: 'gear', id })));
+  return [...clothes, ...gear];
+}
+
+function equipGridHTML() {
+  const list = ownedEquipment();
+  const cells = list.map(({ kind, id }) => {
+    const worn = kind === 'cloth' ? OutfitSystem.isWorn(id) : GearSystem.isEquipped(id);
+    const locked = kind === 'gear' && !GearSystem.canEquip(id);
+    const name = kind === 'cloth' ? CLOTHES[id].name : GearSystem.displayName(id);
+    const inner = kind === 'cloth' ? `<span class="ico">${CLOTHES[id].icon}</span>` : gearIconHTML(id);
+    return `<div class="slot ${isEqSelected(kind, id) ? 'selected' : ''} ${locked ? 'locked' : ''}" data-eq="${kind}" data-id="${id}" title="${name}">
+      <div class="slot-inner">${inner}</div>
+      ${worn ? '<span class="worn-badge">E</span>' : ''}
+      ${locked ? '<span class="lock-badge">🔒</span>' : ''}
+    </div>`;
+  });
+  // 빈 칸으로 줄을 채워 격자 모양을 유지
+  const fill = Math.max(16, Math.ceil(list.length / 8) * 8) - list.length;
+  for (let i = 0; i < fill; i++) cells.push('<div class="slot empty-cell"></div>');
+  return `<div class="inv-grid equip-grid scroll">${cells.join('')}</div>`;
+}
+
+function sellBlockHTML(id, price, worn, warn) {
+  if (worn) return `<button class="btn" disabled title="착용 중에는 팔 수 없어요">판매 불가 (착용 중)</button>`;
+  if (sellConfirm === id) {
+    return `<span class="sell-ask">정말 팔까요? <b>+${price.toLocaleString()}원</b>${warn ? `<br><small class="warn-text">${warn}</small>` : ''}</span>
+      <button class="btn danger" data-act="sell-ok">판매</button>
+      <button class="btn" data-act="sell-cancel">취소</button>`;
+  }
+  return `<button class="btn sell" data-act="sell">💰 판매 <small>+${price.toLocaleString()}원</small></button>`;
+}
+
+function equipDetailHTML() {
+  if (!eqSel) return '<div class="detail empty">장비를 클릭하면 정보가 나와요. 장착하거나 판매할 수 있어요.</div>';
+  const { kind, id } = eqSel;
+  if (kind === 'cloth') {
+    const c = CLOTHES[id];
+    const worn = OutfitSystem.isWorn(id);
+    const warn = OutfitSystem.canRebuy(id) ? '' : `⚠ ${c.source}에서 얻는 옷이라 팔면 다시 얻을 수 없어요`;
+    return `<div class="detail">
+      <div class="d-head"><span class="ico">${c.icon}</span> <b>${c.name}</b> <span class="tag">${SLOT_NAMES[c.slot]}</span> ${worn ? '<span class="tag held">착용 중</span>' : ''}</div>
+      <div class="d-info">최대 체력 +${c.stamina} · ${SETS[c.setId].icon} ${SETS[c.setId].name} (${OutfitSystem.setProgress(c.setId)}/3) · ${SETS[c.setId].desc}<br><small>획득처: ${c.source}</small></div>
+      <div class="d-actions">
+        ${worn ? '<button class="btn" data-act="unequip">벗기</button>' : '<button class="btn primary" data-act="equip">입기</button>'}
+        ${sellBlockHTML(id, OutfitSystem.sellPrice(id), worn, warn)}
+      </div>
+    </div>`;
+  }
+  const g = GEAR[id];
+  const on = GearSystem.isEquipped(id);
+  const locked = !GearSystem.canEquip(id);
+  return `<div class="detail">
+    <div class="d-head"><span class="ico">${gearIconSVG(id)}</span> <b>${GearSystem.displayName(id)}</b> <span class="tag">${TOOLS[g.kind].name}</span> ${on ? '<span class="tag held">장착 중</span>' : ''}</div>
+    <div class="d-info">${g.tier + 1}단계 장비 · ${statsText(g.kind, GearSystem.statsOf(id))}${locked ? `<br><small class="warn-text">🔒 '${RANKS[g.rank].name}' 직책부터 착용할 수 있어요</small>` : ''}</div>
+    <div class="d-actions">
+      ${on ? '' : `<button class="btn primary" data-act="equip" ${locked ? 'disabled' : ''}>장착</button>`}
+      ${sellBlockHTML(id, GearSystem.sellPrice(id), on, '')}
+    </div>
+  </div>`;
+}
+
+/* ───── 일반 가방 탭 ───── */
+
 function detailHTML() {
-  if (!sel) return '<div class="detail empty">아이템을 클릭하면 정보가 나와요. 선택한 뒤 아래 핫바 칸을 클릭하면 핫바에 등록돼요.</div>';
-  const slot = InventorySystem.slots(sel.area)[sel.index];
-  if (!slot) return '<div class="detail empty">빈 칸이에요.</div>';
+  const slot = sel && InventorySystem.slots(sel.area)[sel.index];
+  if (!slot) return '';
   const it = getItem(slot.id);
   let info = '';
   let actions = '';
@@ -98,9 +170,6 @@ function detailHTML() {
     const heal = Math.round(it.heal * (1 + OutfitSystem.foodHealBonus()));
     info = `먹으면 체력 +${heal}`;
     actions = '<button class="btn primary" data-act="eat">먹기</button>';
-  } else if (it.type === 'tool') {
-    const id = GearSystem.equippedId(it.toolKind);
-    info = `장착 중: <b>${GearSystem.displayName(id)}</b> · ${TOOLS[it.toolKind].desc} · ${statsText(it.toolKind, GearSystem.statsOf(id))}<br><small>'장비' 탭에서 다른 장비로 바꿀 수 있어요</small>`;
   } else if (it.type === 'special') {
     info = it.desc;
   }
@@ -113,72 +182,42 @@ function detailHTML() {
   </div>`;
 }
 
-function gearCard(id) {
-  const g = GEAR[id];
-  const on = GearSystem.isEquipped(id);
-  const locked = !GearSystem.canEquip(id);
-  const st = GearSystem.statsOf(id);
-  const title = locked ? `'${RANKS[g.rank].name}' 직책부터 착용할 수 있어요` : on ? '장착 중' : '클릭해서 장착';
-  return `<div class="cloth-card gear-card ${on ? 'on' : ''} ${locked ? 'locked' : ''}" data-gear="${id}" title="${title}">
-    <span class="ico" style="color:${hex(g.color)}">${locked ? '🔒' : g.icon}</span>
-    <div><b>${GearSystem.displayName(id)}</b><small>${statsText(g.kind, st)}</small><small>${locked ? `🔒 '${RANKS[g.rank].name}' 직책 필요` : `${g.tier + 1}단계 장비`}</small></div>
-    ${on ? '<span class="tag held">장착 중</span>' : ''}
-  </div>`;
-}
-
-function gearHTML() {
-  const sections = TOOL_ORDER.map((kind) => {
-    const t = TOOLS[kind];
-    const owned = GearSystem.ownedByKind(kind);
-    return `<div class="gear-section"><div class="shop-section">${t.icon} ${t.name} <small>${t.desc} · 보유 ${owned.length}개</small></div>
-      <div class="wardrobe">${owned.map(gearCard).join('')}</div></div>`;
-  }).join('');
-  return `<div class="gear-wrap scroll">${sections}
-    <div class="note">현재 직책: <b>${RANKS[G.state.rank].name}</b> (${G.state.rank + 1}단계 장비까지 착용 가능) · 새 장비는 상점, 강화는 대장간에서.</div></div>`;
-}
-
 function gridHTML() {
-  if (tab === 'tool') return gearHTML();
-  if (tab === 'cloth') {
-    const owned = G.state.ownedClothes;
-    if (!owned.length) return '<div class="wardrobe empty">아직 옷이 없어요. 퀘스트 보상이나 상점·대장간에서 얻을 수 있어요.</div>';
-    return `<div class="wardrobe">${owned.map((id) => {
-      const c = CLOTHES[id];
-      const on = G.state.player.outfit[c.slot] === id;
-      return `<div class="cloth-card ${on ? 'on' : ''}" data-cloth="${id}" title="${clothTooltip(id)}">
-        <span class="ico">${c.icon}</span>
-        <div><b>${c.name}</b><small>${SLOT_NAMES[c.slot]} · 체력 +${c.stamina}</small><small>${SETS[c.setId].name} ${OutfitSystem.setProgress(c.setId)}/3</small></div>
-        ${on ? '<span class="tag held">착용 중</span>' : ''}
-      </div>`;
-    }).join('')}</div>`;
-  }
+  if (tab === 'equip') return equipGridHTML();
   const list = G.state.bag[tab];
   const inv = list.map((s, i) => {
     const it = s && getItem(s.id);
     const selected = sel?.area === tab && sel.index === i ? 'selected' : '';
     return `<div class="slot ${selected}" data-area="${tab}" data-index="${i}" title="${it ? it.name : ''}"><div class="slot-inner">${slotHTML(s)}</div></div>`;
   }).join('');
-  const empty = list.every((s) => !s) ? `<div class="note">${EMPTY_TEXT[tab]}</div>` : '';
-  return `<div class="inv-grid">${inv}</div>${empty}`;
+  return `<div class="inv-grid">${inv}</div>`;
+}
+
+function footerHTML() {
+  if (tab === 'equip') {
+    return `<div class="bag-foot"><span>보유 장비 <b>${ownedEquipment().length}</b>개</span><small>현재 직책: ${RANKS[G.state.rank].name} · 새 장비는 상점, 강화는 대장간에서</small></div>`;
+  }
+  const list = G.state.bag[tab];
+  return `<div class="bag-foot"><span><b>${list.filter(Boolean).length}</b> / ${list.length}</span></div>`;
 }
 
 function hotbarHTML() {
-  return `<div class="inv-hotbar-label">핫바 (1~${G.state.hotbar.length}) · 1~3번 칸은 농기구 고정</div><div class="inv-hotbar">${G.state.hotbar.map((s, i) => {
+  return `<div class="inv-hotbar-label">핫바 (1~${G.state.hotbar.length}) · 아이템을 고른 뒤 칸을 누르면 자리를 바꿔요</div><div class="inv-hotbar">${G.state.hotbar.map((s, i) => {
     const selected = sel?.area === 'hotbar' && sel.index === i ? 'selected' : '';
-    const fixed = InventorySystem.isFixed('hotbar', i) ? 'fixed' : '';
-    return `<div class="slot ${selected} ${fixed}" data-area="hotbar" data-index="${i}"><span class="key">${i + 1}</span><div class="slot-inner">${slotHTML(s)}</div></div>`;
+    return `<div class="slot ${selected}" data-area="hotbar" data-index="${i}"><span class="key">${i + 1}</span><div class="slot-inner">${slotHTML(s)}</div></div>`;
   }).join('')}</div>`;
 }
 
 function onSlotClick(area, index) {
+  eqSel = null;
+  sellConfirm = null;
   if (sel && !(sel.area === area && sel.index === index)) {
     const cross = sel.area !== area || area === 'hotbar';
     const from = InventorySystem.slots(sel.area)[sel.index];
-    // 고정 칸(농기구)을 고른 상태에서 다른 칸을 누르면 옮기지 않고 그 칸을 고른다
-    if (cross && from && !InventorySystem.isFixed(sel.area, sel.index)) {
+    if (cross && from) {
       if (!InventorySystem.swap(sel.area, sel.index, area, index)) {
         AudioManager.sfx('error');
-        toast(InventorySystem.isFixed(area, index) ? '핫바 1~3번 칸은 농기구 고정 칸이에요' : '그 아이템은 이 가방 칸에 넣을 수 없어요', 'warn');
+        toast('그 아이템은 이 가방 칸에 넣을 수 없어요', 'warn');
         return;
       }
       sel = { area, index };
@@ -196,47 +235,77 @@ function onSlotClick(area, index) {
   refreshModal('inventory');
 }
 
+function onEquipClick(kind, id) {
+  AudioManager.sfx('click');
+  sellConfirm = null;
+  if (sel?.area !== 'hotbar') sel = null;
+  eqSel = isEqSelected(kind, id) ? null : { kind, id };
+  if (eqSel) tab = 'equip';
+  refreshModal('inventory');
+}
+
+function onEquipAction(act) {
+  if (!eqSel) return;
+  const { kind, id } = eqSel;
+  if (act === 'equip') {
+    if (kind === 'cloth') OutfitSystem.equip(id);
+    else GearSystem.equip(id);
+  } else if (act === 'unequip') {
+    OutfitSystem.unequip(CLOTHES[id].slot);
+  } else if (act === 'sell') {
+    AudioManager.sfx('click');
+    sellConfirm = id;
+    refreshModal('inventory');
+  } else if (act === 'sell-cancel') {
+    sellConfirm = null;
+    refreshModal('inventory');
+  } else if (act === 'sell-ok') {
+    sellConfirm = null;
+    const ok = kind === 'cloth' ? OutfitSystem.sell(id) : GearSystem.sell(id);
+    if (ok) eqSel = null;
+    refreshModal('inventory');
+  }
+}
+
 function render(body) {
   body.innerHTML = `
     <div class="inv-wrap">
       ${leftHTML()}
-      <div class="inv-right">
+      <div class="inv-right inv-frame">
         ${tabsHTML(TABS, tab)}
         ${gridHTML()}
-        ${tab === 'cloth' || tab === 'tool' ? '' : detailHTML()}
+        ${footerHTML()}
+        ${tab === 'equip' ? equipDetailHTML() : detailHTML()}
         ${hotbarHTML()}
       </div>
     </div>`;
+  CharacterPreview.mount(body.querySelector('.char-3d'));
   bindTabs(body, (t) => {
     tab = t;
     if (sel && sel.area !== 'hotbar') sel = null;
+    if (t !== 'equip') eqSel = null;
+    sellConfirm = null;
     refreshModal('inventory');
   });
   body.querySelectorAll('.slot[data-area]').forEach((el) => {
     el.addEventListener('click', () => onSlotClick(el.dataset.area, Number(el.dataset.index)));
   });
-  body.querySelectorAll('.equip-slot.filled').forEach((el) => {
-    el.addEventListener('click', () => OutfitSystem.unequip(el.dataset.slot));
+  body.querySelectorAll('[data-eq]').forEach((el) => {
+    el.addEventListener('click', () => onEquipClick(el.dataset.eq, el.dataset.id));
   });
-  body.querySelectorAll('.cloth-card').forEach((el) => {
+  body.querySelectorAll('.detail [data-act]').forEach((el) => {
     el.addEventListener('click', () => {
-      const id = el.dataset.cloth;
-      const c = CLOTHES[id];
-      if (G.state.player.outfit[c.slot] === id) OutfitSystem.unequip(c.slot);
-      else OutfitSystem.equip(id);
+      if (el.dataset.act === 'eat') StaminaSystem.eat(sel.area, sel.index);
+      else onEquipAction(el.dataset.act);
     });
-  });
-  body.querySelectorAll('.gear-card').forEach((el) => {
-    el.addEventListener('click', () => GearSystem.equip(el.dataset.gear));
-  });
-  body.querySelector('[data-act="eat"]')?.addEventListener('click', () => {
-    StaminaSystem.eat(sel.area, sel.index);
   });
 }
 
 export const InventoryUI = {
   open() {
     sel = null;
+    eqSel = null;
+    sellConfirm = null;
     openModal('inventory', '🎒 가방', render, { wide: true });
   },
   init() {

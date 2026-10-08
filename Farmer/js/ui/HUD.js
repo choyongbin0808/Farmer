@@ -48,7 +48,7 @@ export function initHUD(handlers) {
   bar.innerHTML = '';
   for (let i = 0; i < HOTBAR_SIZE; i++) {
     const s = document.createElement('div');
-    s.className = `slot hot-slot${InventorySystem.isFixed('hotbar', i) ? ' fixed' : ''}`;
+    s.className = 'slot hot-slot';
     s.dataset.index = i;
     s.innerHTML = `<span class="key">${i + 1}</span><div class="slot-inner"></div>`;
     s.addEventListener('click', () => InventorySystem.select('hotbar', i));

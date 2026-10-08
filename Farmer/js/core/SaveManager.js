@@ -1,5 +1,5 @@
-import { G, FARM_MAX, HOTBAR_SIZE, FIXED_HOTBAR, createNewState, newPlot, newBag, newHotbar } from './Game.js';
-import { GEAR, TOOL_ORDER, startingGear } from '../data/tools.js';
+import { G, FARM_MAX, HOTBAR_SIZE, createNewState, newPlot, newBag, newHotbar } from './Game.js';
+import { GEAR, TOOLS, TOOL_ORDER, startingGear } from '../data/tools.js';
 import { getItem } from '../data/items.js';
 import { bagAreaOf } from '../systems/InventorySystem.js';
 
@@ -78,22 +78,25 @@ function migrateBag(data) {
   delete data.inventory;
 }
 
-/**
- * 핫바를 7칸으로 맞추고 1~3칸에 호미·물뿌리개·낫을 고정한다.
- * 다른 곳에 있던 농기구는 고정 칸으로 모으고, 나머지 아이템은 4번 칸부터 → 넘치면 가방으로
- */
+/** 예전 세이브의 핫바·가방에 있던 농기구 아이템 — 이제는 장착 장비가 자동으로 쓰이므로 치운다 */
+const OLD_TOOL_ITEMS = Object.values(TOOLS).map((t) => t.itemId);
+
+/** 핫바를 7칸으로 맞추고(넘치는 아이템은 가방으로), 핫바·가방의 농기구 아이템을 치운다 */
 function migrateHotbar(data) {
-  const isTool = (s) => s && FIXED_HOTBAR.includes(s.id);
-  const rest = (data.hotbar || []).filter((s) => s && !isTool(s));
-  if (data.bag) for (const list of Object.values(data.bag)) list.forEach((s, i) => { if (isTool(s)) list[i] = null; });
-  const hotbar = newHotbar();
-  for (let i = FIXED_HOTBAR.length; i < HOTBAR_SIZE && rest.length; i++) hotbar[i] = rest.shift();
-  for (const s of rest) {
+  if (!Array.isArray(data.hotbar)) data.hotbar = newHotbar();
+  const toBag = (s) => {
     const list = data.bag?.[bagAreaOf(s.id)];
     const i = list ? list.indexOf(null) : -1;
     if (i >= 0) list[i] = s;
-  }
+  };
+  const hotbar = data.hotbar.slice(0, HOTBAR_SIZE);
+  while (hotbar.length < HOTBAR_SIZE) hotbar.push(null);
+  data.hotbar.slice(HOTBAR_SIZE).forEach((s) => s && toBag(s));
   data.hotbar = hotbar;
+
+  for (const list of [data.hotbar, ...Object.values(data.bag || {})]) {
+    list.forEach((s, i) => { if (s && OLD_TOOL_ITEMS.includes(s.id)) list[i] = null; });
+  }
 }
 
 export function loadGame() {

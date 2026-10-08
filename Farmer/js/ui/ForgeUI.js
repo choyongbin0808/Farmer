@@ -8,6 +8,7 @@ import { FarmSystem } from '../systems/FarmSystem.js';
 import { OutfitSystem } from '../systems/OutfitSystem.js';
 import { GearSystem } from '../systems/GearSystem.js';
 import { openModal, refreshModal, tabsHTML, bindTabs } from './Panels.js';
+import { gearIconSVG } from './GearIcons.js';
 
 const TABS = [['tools', '🔨 장비 강화'], ['clothes', '👕 옷 구매']];
 let tab = 'tools';
@@ -27,7 +28,7 @@ function gearRow(id) {
   const tags = (equipped ? '<span class="tag held">장착 중</span>' : '')
     + (locked ? `<span class="tag lock">🔒 '${RANKS[g.rank].name}'부터 착용</span>` : '');
   return `<div class="shop-row tool-row">
-    <span class="ico big" style="color:${hex(g.color)}">${g.icon}<span class="lv" style="background:${hex(g.color)}">+${e}</span></span>
+    <span class="ico big">${gearIconSVG(id)}<span class="lv" style="background:${hex(g.color)}">+${e}</span></span>
     <div class="info"><b>${GearSystem.displayName(id)}</b> ${tags}<small>${TOOLS[g.kind].desc} · ${statsText(g.kind, st)}</small>${next}</div>
     <div class="qty">${cost !== null ? `<button class="btn primary" data-up="${id}" ${G.state.player.money < cost ? 'disabled' : ''}>강화 ${formatMoney(cost)}원</button>` : ''}</div>
   </div>`;

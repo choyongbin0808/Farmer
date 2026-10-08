@@ -118,11 +118,6 @@
 .slot:hover { transform: translateY(-2px); border-color: var(--line-strong); }
 .slot.selected { border: 3px solid var(--gold); box-shadow: 0 0 0 3px rgba(230, 169, 58, 0.3); background: #fff6d2; }
 .slot.dim { opacity: 0.3; }
-/* 농기구 고정 칸 (핫바 1~3): 살짝 다른 바탕 + 자물쇠, 고정 칸 뒤에 간격 */
-.slot.fixed { background: #f3ecd8; }
-.slot.fixed.selected { background: #fff6d2; }
-.slot.fixed::after { content: '🔒'; position: absolute; top: 2px; right: 4px; font-size: 9px; opacity: 0.55; }
-.slot.fixed + .slot:not(.fixed) { margin-left: 8px; }
 .slot .key {
   position: absolute;
   top: 2px;
@@ -229,6 +224,16 @@
 /* 3D 위 표시 (수확 표시, 말풍선, 이름표) */
 #markers { position: fixed; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
 .mk { position: absolute; left: 0; top: 0; will-change: transform; }
+/* 작업 진행 게이지 (플레이어 머리 위) */
+.work-gauge {
+  width: 46px;
+  height: 8px;
+  padding: 1.5px;
+  border-radius: 999px;
+  background: rgba(70, 50, 30, 0.55);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.work-gauge i { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(#b8ef8c, #6cc04a); }
 .mk.harvest {
   pointer-events: auto;
   cursor: pointer;

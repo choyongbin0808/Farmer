@@ -11,6 +11,8 @@ const npcTags = {};
 const floats = [];
 let beacon;
 let arrow;
+let gauge;
+let gaugeFill;
 let onPlotClick = null;
 
 function project(x, y, z) {
@@ -30,7 +32,7 @@ export function initMarkers(scene, cam, handlers) {
     const el = document.createElement('div');
     el.className = 'mk harvest hidden';
     el.textContent = '🧺';
-    el.title = '낫을 들고 클릭해서 수확';
+    el.title = '클릭해서 수확';
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       onPlotClick?.(plot);
@@ -54,6 +56,26 @@ export function initMarkers(scene, cam, handlers) {
   scene.add(beacon);
 
   arrow = document.getElementById('edge-arrow');
+
+  gauge = document.createElement('div');
+  gauge.className = 'mk work-gauge hidden';
+  gauge.innerHTML = '<i></i>';
+  root.appendChild(gauge);
+  gaugeFill = gauge.firstChild;
+}
+
+/** 밭 작업 중이면 머리 위에 작은 진행 게이지를 띄운다 */
+function updateWorkGauge(playerPos) {
+  const prog = G.refs.player?.workProgress;
+  if (prog == null) {
+    gauge.classList.add('hidden');
+    return;
+  }
+  const y = G.refs.player.vehicle ? 3.0 : 2.45;
+  const p = project(playerPos.x, y, playerPos.z);
+  gauge.classList.toggle('hidden', p.behind);
+  gauge.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
+  gaugeFill.style.width = `${prog * 100}%`;
 }
 
 export function addFloatText(text, pos, color = '#fff') {
@@ -115,6 +137,8 @@ export function updateMarkers(dt, t, playerPos, visible) {
       floats.splice(i, 1);
     }
   }
+
+  updateWorkGauge(playerPos);
 
   // 퀘스트 위치 표시
   const q = G.mode === 'play' ? QuestSystem.tracked() : null;

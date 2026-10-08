@@ -11,6 +11,7 @@ import { StorageSystem } from '../systems/StorageSystem.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { openModal, refreshModal, tabsHTML, bindTabs } from './Panels.js';
 import { toast } from './HUD.js';
+import { gearIconSVG } from './GearIcons.js';
 
 const TABS = [['seed', '🌱 씨앗 구매'], ['goods', '🍞 음식·잡화·옷 구매'], ['gear', '🔧 장비 구매'], ['sell', '💰 작물 판매']];
 let tab = 'seed';
@@ -79,7 +80,7 @@ function gearTab() {
       ? `<span class="tag ${e.equipped ? 'held' : ''}">${e.equipped ? '장착 중' : '보유 중'}</span>`
       : `<button class="btn small primary" data-gear="${e.id}" ${money < g.price ? 'disabled' : ''}>구매 ${formatMoney(g.price)}원</button>`;
     return `<div class="shop-row ${e.owned ? 'have' : ''}">
-      <span class="ico big" style="color:${hex(g.color)}">${g.icon}<span class="lv" style="background:${hex(g.color)}">${g.tier + 1}</span></span>
+      <span class="ico big">${gearIconSVG(e.id)}<span class="lv" style="background:${hex(g.color)}">${g.tier + 1}</span></span>
       <div class="info"><b>${g.name}</b> ${rankTag}
         <small>${statsText(g.kind, st)} · 강화 +5까지 가능</small>
         <small>${e.owned ? '구매 완료' : `${formatMoney(g.price)}원`}</small></div>

@@ -2,7 +2,8 @@ import { G, FARM_MAX, HOTBAR_SIZE } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { CROPS } from '../data/crops.js';
-import { rangeOffsets, rollHarvest } from '../data/tools.js';
+import { TOOLS, rollHarvest } from '../data/tools.js';
+import { getItem } from '../data/items.js';
 import { InventorySystem } from './InventorySystem.js';
 import { GearSystem } from './GearSystem.js';
 import { StorageSystem } from './StorageSystem.js';
@@ -18,116 +19,90 @@ function plots() {
   return G.refs.plots;
 }
 
-function plotAt(r, c) {
-  const size = G.state.farm.size;
-  if (r < 0 || c < 0 || r >= size || c >= size) return null;
-  return plots().find((p) => p.r === r && p.c === c) || null;
-}
-
 export const FarmSystem = {
-  /** 장비 범위('single' | 'row' | 'square')에 따른 작업 대상 밭 목록 */
-  rangePlots(plot, range) {
-    return rangeOffsets(range).map(([dr, dc]) => plotAt(plot.r + dr, plot.c + dc)).filter(Boolean);
+  /** 물을 줘야 하는 밭인지 (갈았거나 심었고, 아직 물을 안 줬고, 다 자라지 않음) */
+  needsWater(p) {
+    return p.data.state !== 'empty' && !p.data.watered && !p.isReady();
   },
 
-  /** 마우스를 올렸을 때 강조할 밭 목록과 상태 */
-  preview(plot) {
+  /**
+   * 밭 상태(+ 핫바에서 고른 씨앗·특별 아이템)에 따라 할 작업을 고른다. 농기구는 장착한 장비를 자동으로 쓴다.
+   *  다 자람 → 수확(낫) · 성장 아이템을 들고 자라는 작물 → 사용 · 빈 땅 → 갈기(호미)
+   *  물 안 준 땅 → 물 주기(물뿌리개) · 갈고 물 준 땅 + 씨앗 → 심기 · 물 준 자라는 작물 → 정보
+   *  씨앗은 갈고 물까지 준 땅에만 심을 수 있다.
+   */
+  actionFor(plot) {
     if (!plot?.active) return null;
-    if (plot.isReady()) return { plots: [plot], ok: this.holdingSickle() };
-    const item = InventorySystem.getHeldItem();
-    if (item?.type === 'tool' && item.toolKind !== 'sickle') {
-      return { plots: this.rangePlots(plot, GearSystem.stats(item.toolKind).range), ok: true };
+    const d = plot.data;
+    const held = InventorySystem.getHeld();
+    const item = held?.item;
+    if (plot.isReady()) return { kind: 'harvest' };
+    if (item?.type === 'special' && d.state === 'planted') return { kind: 'fertilize', held };
+    if (d.state === 'empty') return { kind: 'till' };
+    if (this.needsWater(plot)) return { kind: 'water' };
+    if (d.state === 'tilled' && item?.type === 'seed') return { kind: 'plant', held };
+    if (d.state === 'planted') return { kind: 'info' };
+    return { kind: 'needSeed' };
+  },
+
+  /** 마우스를 올렸을 때 강조할 밭 목록과 상태 (모든 작업은 1칸) */
+  preview(plot) {
+    const a = this.actionFor(plot);
+    if (!a) return null;
+    if (a.kind === 'plant') {
+      const cropId = a.held.item.cropId;
+      return { plots: [plot], ok: StaminaSystem.canPlant(cropId), cost: StaminaSystem.plantCost(cropId) };
     }
-    if (item?.type === 'seed') {
-      const ok = plot.data.state === 'tilled' && StaminaSystem.canPlant(item.cropId);
-      return { plots: [plot], ok, cost: plot.data.state === 'tilled' ? StaminaSystem.plantCost(item.cropId) : 0 };
-    }
-    return { plots: [plot], ok: true };
+    return { plots: [plot], ok: a.kind !== 'needSeed' };
   },
 
   /** 자라는 중인 밭을 눌렀을 때 작업 대신 작물 정보를 보여 줄지 */
   showsInfo(plot) {
-    if (!plot.active || plot.data.state !== 'planted' || plot.isReady()) return false;
-    const item = InventorySystem.getHeldItem();
-    if (item?.type === 'special') return false;
-    if (item?.type === 'tool' && item.toolKind === 'can') {
-      const needWater = this.rangePlots(plot, GearSystem.stats('can').range).some((p) => p.data.state !== 'empty' && !p.data.watered && !p.isReady());
-      return !needWater;
-    }
-    return true;
-  },
-
-  /** 수확은 낫 계열(낫 · 파종기)을 들고 있을 때만 */
-  holdingSickle() {
-    const item = InventorySystem.getHeldItem();
-    return item?.type === 'tool' && item.toolKind === 'sickle';
-  },
-
-  needSickle() {
-    AudioManager.sfx('error');
-    toast(`${GearSystem.equipped('sickle').icon} ${GearSystem.equipped('sickle').name}을(를) 들어야 수확할 수 있어요 (핫바에서 선택)`, 'warn');
+    return this.actionFor(plot)?.kind === 'info';
   },
 
   usePlot(plot) {
     if (!plot.active) return;
-    const player = G.refs.player;
-    if (player.work) return;
-    if (plot.isReady()) return this.holdingSickle() ? this.harvest(plot) : this.needSickle();
+    if (G.refs.player.work) return;
+    const a = this.actionFor(plot);
+    if (!a) return;
+    if (a.kind === 'harvest') return this.harvest(plot);
+    if (a.kind === 'till') return this.till(plot);
+    if (a.kind === 'water') return this.water(plot);
+    if (a.kind === 'plant') return this.plant(plot, a.held);
+    if (a.kind === 'fertilize') return this.fertilize(plot, a.held);
+    if (a.kind === 'needSeed') toast(`🌱 핫바(1~${HOTBAR_SIZE})에서 심을 씨앗을 골라 주세요`);
+  },
 
-    const held = InventorySystem.getHeld();
-    const item = held?.item;
-    if (!item) {
-      toast(`핫바(1~${HOTBAR_SIZE})에서 도구나 씨앗을 골라 주세요`);
-      return;
-    }
-    if (item.type === 'tool') {
-      if (item.toolKind === 'hoe') return this.till(plot);
-      if (item.toolKind === 'can') return this.water(plot);
-      toast(plot.data.state === 'planted' ? '아직 다 자라지 않았어요 🌱' : '수확할 작물이 없어요');
-      return;
-    }
-    if (item.type === 'seed') return this.plant(plot, held);
-    if (item.type === 'special') return this.fertilize(plot, held);
-    if (item.type === 'food') return G.refs.eatHeld?.();
-    toast('이 물건은 밭에 쓸 수 없어요');
+  /** 작업하는 동안 손에 드는 농기구 (무지개 등급 일부는 농기계에 올라탄다) */
+  toolProp(kind) {
+    return { item: getItem(TOOLS[kind].itemId), color: GearSystem.stats(kind).color, vehicle: GearSystem.equipped(kind).vehicle ?? null };
   },
 
   till(plot) {
-    const st = GearSystem.stats('hoe');
-    const targets = this.rangePlots(plot, st.range).filter((p) => p.data.state === 'empty');
-    if (!targets.length) {
-      toast(plot.data.state === 'planted' ? '작물이 자라고 있어요' : '이미 갈린 땅이에요');
-      return;
-    }
+    if (plot.data.state !== 'empty') return;
     G.refs.player.faceTo(plot.x, plot.z);
-    G.refs.player.startWork(st.time, () => {
-      for (const p of targets) {
-        p.data.state = 'tilled';
-        p.refresh();
-        burst({ x: p.x, z: p.z }, { color: 0x8b5a3c });
-      }
+    G.refs.player.startWork(GearSystem.stats('hoe').time, () => {
+      if (plot.data.state !== 'empty') return;
+      plot.data.state = 'tilled';
+      plot.refresh();
+      burst({ x: plot.x, z: plot.z }, { color: 0x8b5a3c });
       AudioManager.sfx('till');
-      EventBus.emit('till', targets.length);
-    }, 'till');
+      EventBus.emit('till', 1);
+    }, 'till', this.toolProp('hoe'));
   },
 
   water(plot) {
-    const st = GearSystem.stats('can');
-    const targets = this.rangePlots(plot, st.range).filter((p) => p.data.state !== 'empty' && !p.data.watered && !p.isReady());
-    if (!targets.length) {
-      toast(plot.data.state === 'empty' ? '먼저 호미로 땅을 갈아 주세요' : '이미 물을 줬어요 💧');
-      return;
-    }
+    if (!this.needsWater(plot)) return;
     G.refs.player.faceTo(plot.x, plot.z);
-    G.refs.player.startWork(st.time, () => {
-      for (const p of targets) {
-        p.data.watered = true;
-        p.refresh();
-        burst({ x: p.x, z: p.z }, { color: 0x6fc3ff, count: 18, up: 2.5 });
-      }
+    G.refs.player.startWork(GearSystem.stats('can').time, () => {
+      if (!this.needsWater(plot)) return;
+      plot.data.watered = true;
+      plot.refresh();
+      burst({ x: plot.x, z: plot.z }, { color: 0x6fc3ff, count: 18, up: 2.5 });
       AudioManager.sfx('water');
-      EventBus.emit('water', targets.length);
-    }, 'water');
+      EventBus.emit('water', 1);
+    }, 'water', this.toolProp('can'));
   },
 
   plant(plot, held) {
@@ -135,6 +110,7 @@ export const FarmSystem = {
     const cropId = held.item.cropId;
     if (d.state === 'empty') return toast('먼저 호미로 땅을 갈아 주세요');
     if (d.state === 'planted') return toast('이미 작물이 심어져 있어요');
+    if (!d.watered) return toast('💧 먼저 물을 줘야 씨앗을 심을 수 있어요');
     const cost = StaminaSystem.plantCost(cropId);
     if (!StaminaSystem.canPlant(cropId)) {
       AudioManager.sfx('error');
@@ -143,7 +119,7 @@ export const FarmSystem = {
     }
     G.refs.player.faceTo(plot.x, plot.z);
     G.refs.player.startWork(0.45, () => {
-      if (plot.data.state !== 'tilled' || !InventorySystem.removeFromSlot(held.area, held.index, 1)) return;
+      if (plot.data.state !== 'tilled' || !plot.data.watered || !InventorySystem.removeFromSlot(held.area, held.index, 1)) return;
       StaminaSystem.spend(cost);
       d.state = 'planted';
       d.cropId = cropId;
@@ -153,7 +129,7 @@ export const FarmSystem = {
       burst({ x: plot.x, z: plot.z }, { color: 0xd9b47a, count: 10, up: 1.5 });
       AudioManager.sfx('plant');
       EventBus.emit('plant', cropId);
-    }, 'plant');
+    }, 'plant', { item: held.item });
   },
 
   /** 성장 아이템(비료 · 성장 촉진제): item.growDays 만큼 성장, 'all'이면 바로 다 자람 */
@@ -191,7 +167,7 @@ export const FarmSystem = {
       AudioManager.sfx('harvest');
       toast(`${CROPS[cropId].icon} +${amount} ${CROPS[cropId].name} → 창고`);
       EventBus.emit('harvest', { cropId, amount });
-    }, 'harvest');
+    }, 'harvest', this.toolProp('sickle'));
   },
 
   /** 잠자고 일어날 때: 물 준 작물 성장 */

@@ -7,7 +7,7 @@ import { toast } from '../ui/HUD.js';
 
 /**
  * 농기구 장비 시스템
- * - 종류(호미/물뿌리개/낫)마다 장비 하나를 장착하고, 핫바의 도구 아이템은 장착한 장비의 능력치를 따른다.
+ * - 종류(호미/물뿌리개/낫)마다 장비 하나를 장착하고, 밭 작업 때 장착한 장비가 자동으로 쓰인다.
  * - 구매는 직책과 무관, 장착은 장비 등급 ≤ 현재 직책 단계일 때만 가능.
  * - 강화(+0 ~ +5)는 장비 아이템마다 따로 저장된다.
  */
@@ -112,6 +112,34 @@ export const GearSystem = {
     toast(`🔨 ${this.displayName(id)}(으)로 강화했어요!`, 'good');
     EventBus.emit('gear', GEAR[id].kind);
     EventBus.emit('money');
+  },
+
+  /** 판매가 = (구매가 + 강화에 쓴 비용)의 절반, 최소 10원 */
+  sellPrice(id) {
+    const base = TIERS[GEAR[id].tier].enhanceBase;
+    let spent = GEAR[id].price;
+    for (let e = 0; e < this.enhanceOf(id); e++) spent += base * (e + 1);
+    return Math.max(10, Math.floor(spent / 2));
+  },
+
+  /** 장착 중이 아닌 장비를 판다 (종류마다 장착 장비 하나는 항상 남는다) */
+  sell(id) {
+    if (!this.owns(id)) return false;
+    if (this.isEquipped(id)) {
+      AudioManager.sfx('error');
+      toast('장착 중인 장비는 팔 수 없어요', 'warn');
+      return false;
+    }
+    const money = this.sellPrice(id);
+    const name = this.displayName(id);
+    G.state.gear.owned = G.state.gear.owned.filter((g) => g !== id);
+    delete G.state.gear.enhance[id];
+    G.state.player.money += money;
+    AudioManager.sfx('coin');
+    toast(`${GEAR[id].icon} ${name}을(를) 팔았어요 (+${money.toLocaleString()}원)`, 'good');
+    EventBus.emit('gear', GEAR[id].kind);
+    EventBus.emit('money');
+    return true;
   },
 
   /** 강화 단계가 level 이상인 장착 장비 수 (퀘스트용) */
