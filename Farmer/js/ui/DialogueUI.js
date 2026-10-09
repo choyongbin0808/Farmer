@@ -46,15 +46,30 @@ export const DialogueUI = {
 
   /** 대사 여러 줄을 순서대로 보여 주고 모두 넘기면 resolve */
   async say(speaker, lines) {
+    const gen = this.gen;
     this.show();
     this.setSpeaker(speaker);
     el.options.innerHTML = '';
     for (const line of lines) {
       await this.type(line);
+      if (gen !== this.gen) return; // abort() 됨
       el.next.classList.remove('hidden');
       await new Promise((r) => { advance = r; });
       el.next.classList.add('hidden');
+      if (gen !== this.gen) return;
     }
+  },
+
+  gen: 0,
+
+  /** 진행 중인 대사를 그 자리에서 끊는다 (엔딩 건너뛰기) — 끊긴 say 는 더 진행하지 않는다 */
+  abort() {
+    this.gen++;
+    typing?.finish();
+    const a = advance;
+    advance = null;
+    a?.();
+    this.hide();
   },
 
   type(text) {

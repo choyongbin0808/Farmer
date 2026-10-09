@@ -126,6 +126,22 @@ export const AudioManager = {
       case 'set': [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, 0.35, { vol: 0.1, when: i * 0.06 })); break;
       case 'sleep': [523, 440, 349, 262].forEach((f, i) => this.tone(f, 0.6, { vol: 0.1, when: i * 0.25 })); break;
       case 'fanfare': [523, 523, 659, 784, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.45, { type: 'triangle', vol: 0.14, when: i * 0.18 })); break;
+      case 'cast': this.noise(0.25, { type: 'highpass', freq: 1800, vol: 0.12 }); this.tone(900, 0.25, { vol: 0.05, slideTo: 300 }); break;
+      case 'splash': this.noise(0.35, { type: 'bandpass', freq: 900, vol: 0.25 }); break;
+      case 'bite': this.tone(1046, 0.08, { type: 'square', vol: 0.07 }); this.tone(1318, 0.12, { type: 'square', vol: 0.07, when: 0.09 }); break;
+      case 'catch': this.noise(0.3, { type: 'bandpass', freq: 1200, vol: 0.2 }); [659, 880, 1175].forEach((f, i) => this.tone(f, 0.25, { type: 'triangle', vol: 0.12, when: 0.1 + i * 0.08 })); break;
+      case 'escape': this.tone(440, 0.2, { type: 'triangle', vol: 0.1, slideTo: 220 }); break;
+      case 'pick': this.tone(2400 + Math.random() * 400, 0.12, { type: 'square', vol: 0.04 }); this.noise(0.08, { type: 'highpass', freq: 2500, vol: 0.2 }); break;
+      case 'rock': this.noise(0.4, { freq: 400, vol: 0.4 }); this.tone(90, 0.3, { type: 'triangle', vol: 0.15 }); break;
+      case 'brew': [0, 0.15, 0.3, 0.45].forEach((w) => this.tone(200 + Math.random() * 200, 0.08, { vol: 0.08, when: w, slideTo: 500 })); break;
+      case 'door': this.noise(0.5, { freq: 300, vol: 0.25 }); this.tone(160, 0.4, { type: 'triangle', vol: 0.08 }); break;
+      // 여러 사람의 박수: 짧은 잡음을 무작위 시점에 잔뜩
+      case 'applause':
+        for (let i = 0; i < 110; i++) {
+          this.noise(0.05, { type: 'bandpass', freq: 1100 + Math.random() * 2400, vol: 0.05 + Math.random() * 0.1, when: Math.random() * 3.6 });
+        }
+        break;
+      case 'chime': [784, 1047, 1319, 1568, 2093].forEach((f, i) => this.tone(f, 0.9, { vol: 0.07, when: i * 0.14 })); break;
       default: break;
     }
   },
@@ -177,9 +193,21 @@ export const AudioManager = {
   },
 
   // weather, distToStream, period 를 받아 환경음 조절
-  updateAmbient(dt, { weather, distToStream, period }) {
+  updateAmbient(dt, { weather, distToStream, period, indoor = false }) {
     if (!this.ctx || this.ctx.state !== 'running') return;
     const t = this.ctx.currentTime;
+    if (indoor) {
+      // 광산 안: 낮은 바람 소리와 가끔 똑똑 떨어지는 물방울
+      this.rainLoop.gain.setTargetAtTime(0, t, 0.5);
+      this.streamLoop.gain.setTargetAtTime(0, t, 0.5);
+      this.windLoop.gain.setTargetAtTime(0.07, t, 1);
+      this.birdTimer -= dt;
+      if (this.birdTimer <= 0) {
+        this.birdTimer = 2 + Math.random() * 5;
+        this.tone(1400 + Math.random() * 800, 0.12, { vol: 0.03, slideTo: 600, dest: this.ambGain });
+      }
+      return;
+    }
     const rain = weather === 'rain' ? 0.25 : 0;
     this.rainLoop.gain.setTargetAtTime(rain, t, 0.5);
     const stream = Math.max(0, 1 - distToStream / 18) * 0.35;

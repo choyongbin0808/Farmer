@@ -6,6 +6,8 @@ import { rollWeather, setWeather, WEATHERS } from '../world/Weather.js';
 import { BUILDINGS } from '../world/World.js';
 import { FarmSystem } from './FarmSystem.js';
 import { StaminaSystem } from './StaminaSystem.js';
+import { MiningSystem } from './MiningSystem.js';
+import { QuestSystem } from './QuestSystem.js';
 import { fade, banner, toast } from '../ui/HUD.js';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -48,16 +50,21 @@ export const TimeSystem = {
     this.sleeping = true;
     AudioManager.sfx('sleep');
     if (auto) toast('너무 늦었어요… 집으로 돌아가 잠이 들었어요 💤');
+    G.refs.cancelActivities?.();
     await fade(true);
     const h = BUILDINGS.house;
-    G.refs.player.setPosition(h.ix + 0.6, h.iz);
-    G.refs.player.facing = Math.PI / 2;
-    this.newDay();
+    // 광산에 있었어도 집에서 눈을 뜬다
+    MiningSystem.moveTo('village', { x: h.ix + 0.6, z: h.iz }, Math.PI / 2);
+    const hallDone = this.newDay();
     await wait(700);
     await fade(false);
     const w = WEATHERS[G.state.time.weather];
     const rain = G.state.time.weather === 'rain' ? ' · 비가 와서 밭에 물이 저절로 뿌려졌어요' : '';
     banner(`☀️ ${G.state.time.day}일차 아침`, `${w.icon} 오늘의 날씨: ${w.name}${rain} · 체력이 모두 회복됐어요`);
+    if (hallDone) {
+      AudioManager.sfx('fanfare');
+      banner('🏛️ 새 마을회관 완공!', '이장님께 가서 완료 보고를 해 보세요');
+    }
     this.sleeping = false;
   },
 
@@ -73,7 +80,10 @@ export const TimeSystem = {
     s.stats.todayHarvest = 0;
     s.talkedToday = {};
     FarmSystem.refreshAll();
+    MiningSystem.newDay();
+    const hallDone = QuestSystem.finishHallOvernight();
     EventBus.emit('newDay');
     saveGame();
+    return hallDone;
   },
 };

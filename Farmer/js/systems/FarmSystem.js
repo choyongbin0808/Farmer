@@ -1,7 +1,7 @@
 import { G, FARM_MAX, HOTBAR_SIZE } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
-import { CROPS } from '../data/crops.js';
+import { CROPS, plotDays } from '../data/crops.js';
 import { TOOLS, rollHarvest } from '../data/tools.js';
 import { getItem } from '../data/items.js';
 import { InventorySystem } from './InventorySystem.js';
@@ -53,7 +53,8 @@ export const FarmSystem = {
       const cropId = a.held.item.cropId;
       return { plots: [plot], ok: StaminaSystem.canPlant(cropId), cost: StaminaSystem.plantCost(cropId) };
     }
-    return { plots: [plot], ok: a.kind !== 'needSeed' };
+    // 씨앗 없이 누르면 씨앗 고르기 창이 뜨므로 빈 밭도 누를 수 있는 칸
+    return { plots: [plot], ok: true };
   },
 
   /** 자라는 중인 밭을 눌렀을 때 작업 대신 작물 정보를 보여 줄지 */
@@ -71,7 +72,7 @@ export const FarmSystem = {
     if (a.kind === 'water') return this.water(plot);
     if (a.kind === 'plant') return this.plant(plot, a.held);
     if (a.kind === 'fertilize') return this.fertilize(plot, a.held);
-    if (a.kind === 'needSeed') toast(`🌱 핫바(1~${HOTBAR_SIZE})에서 심을 씨앗을 골라 주세요`);
+    if (a.kind === 'needSeed') toast(`🌱 핫바(1~${HOTBAR_SIZE})에서 심을 씨앗을 고르거나, 밭을 눌러 씨앗을 골라 주세요`);
   },
 
   /** 작업하는 동안 손에 드는 농기구 (무지개 등급 일부는 농기계에 올라탄다) */
@@ -123,6 +124,7 @@ export const FarmSystem = {
       StaminaSystem.spend(cost);
       d.state = 'planted';
       d.cropId = cropId;
+      d.seedling = !!held.item.seedling;
       d.daysGrown = 0;
       d.plantedDay = G.state.time.day;
       plot.refresh();
@@ -138,7 +140,7 @@ export const FarmSystem = {
     const item = held.item;
     if (d.state !== 'planted' || plot.isReady()) return toast('자라고 있는 작물에만 쓸 수 있어요');
     InventorySystem.removeFromSlot(held.area, held.index, 1);
-    const days = CROPS[d.cropId].days;
+    const days = plotDays(d);
     d.daysGrown = item.growDays === 'all' ? days : Math.min(days, d.daysGrown + (item.growDays ?? 1));
     plot.refresh();
     burst({ x: plot.x, z: plot.z }, { color: 0x9be36a, count: 24, up: 3 });
@@ -155,11 +157,14 @@ export const FarmSystem = {
       const cropId = d.cropId;
       const amount = rollHarvest(st.harvest);
       StorageSystem.add('crop_' + cropId, amount);
-      G.state.stats.totalHarvest += amount;
-      G.state.stats.todayHarvest += amount;
+      const st = G.state.stats;
+      st.totalHarvest += amount;
+      st.todayHarvest += amount;
+      st.harvested[cropId] = (st.harvested[cropId] || 0) + amount;
       // 수확한 땅은 굳어서 다시 호미로 갈아야 함
       d.state = 'empty';
       d.cropId = null;
+      d.seedling = false;
       d.daysGrown = 0;
       d.watered = false;
       plot.refresh();
@@ -174,7 +179,7 @@ export const FarmSystem = {
   growAll() {
     for (const p of plots()) {
       const d = p.data;
-      if (d.state === 'planted' && d.watered && d.daysGrown < CROPS[d.cropId].days) d.daysGrown++;
+      if (d.state === 'planted' && d.watered && d.daysGrown < plotDays(d)) d.daysGrown++;
       d.watered = false;
     }
   },

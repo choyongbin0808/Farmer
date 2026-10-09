@@ -71,9 +71,25 @@ const WORK_POSES = {
   }),
 };
 WORK_POSES.swing = (k) => ({ a1x: -Math.sin(k * Math.PI) * 2.0, bx: Math.sin(k * Math.PI) * 0.15 });
+// 곡괭이: 호미처럼 두 손으로 들어 올렸다가 바위를 내리찍음
+WORK_POSES.mine = WORK_POSES.till;
+// 낚싯대 던지기: 뒤로 젖혔다가 앞으로 휙
+WORK_POSES.cast = (k) => ({
+  a1x: kf(k, [[0, -0.9], [0.4, -2.6], [0.7, -0.6], [1, -0.9]]),
+  a0x: kf(k, [[0, -0.5], [0.4, -0.2], [0.7, -0.7], [1, -0.5]]),
+  in0: 0.3,
+  bx: kf(k, [[0, 0], [0.4, -0.12], [0.7, 0.14], [1, 0.04]]),
+});
+// 챔질: 낚싯대를 번쩍 들어 올림
+WORK_POSES.reel = (k) => ({
+  a1x: kf(k, [[0, -0.9], [0.35, -2.4], [1, -1.6]]),
+  a0x: kf(k, [[0, -0.5], [0.35, -1.6], [1, -1.2]]),
+  in0: 0.35,
+  bx: kf(k, [[0, 0.04], [0.35, -0.16], [1, -0.06]]),
+});
 
 /** 동작 한 번의 길이(초) — 작업 시간이 길면 이 동작을 여러 번 반복한다 */
-const MOTION_LEN = { till: 0.8, water: 1.2, plant: 0.45, harvest: 0.85, swing: 0.6 };
+const MOTION_LEN = { till: 0.8, water: 1.2, plant: 0.45, harvest: 0.85, swing: 0.6, mine: 0.65, cast: 0.9, reel: 0.8 };
 
 export function lerpAngle(a, b, t) {
   let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
@@ -96,6 +112,8 @@ export class Player {
     this.facing = 0;
     this.heldKey = '';
     this.onBlocked = null;
+    this.stance = null;
+    this.keepHeld = false; // true 이면 작업이 끝나도 손에 든 것을 내려놓지 않는다 (낚시 중)
     this.armBaseZ = this.parts.arms.map((a) => a.rotation.z);
   }
 
@@ -228,7 +246,7 @@ export class Player {
       if (w.t >= w.dur) {
         this.work = null;
         workPose = null;
-        this.setHeld(null);
+        if (!this.keepHeld) this.setHeld(null);
         w.cb?.();
       }
     } else if (canMove) {
@@ -309,6 +327,11 @@ export class Player {
     if (workPose) {
       this.pose(workPose);
       if (this.work?.motion === 'water') this.dripWater(dt, this.work.k);
+      return;
+    }
+    // 낚시처럼 가만히 서서 무언가를 들고 있을 때의 자세
+    if (this.stance && this.moving < 0.05) {
+      this.pose(typeof this.stance === 'function' ? this.stance() : this.stance);
       return;
     }
     const s = Math.sin(this.walkT) * this.moving;

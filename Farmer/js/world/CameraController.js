@@ -7,10 +7,28 @@ export class CameraController {
     this.pitch = 0.82;
     this.dist = 17;
     this.target = new THREE.Vector3(-14, 0, 18);
-    this.mode = 'follow'; // follow | orbit
+    this.mode = 'follow'; // follow | orbit | shot
     this.orbitCenter = new THREE.Vector3();
     this.orbitDist = 30;
     this.orbitSpeed = 0.08;
+    // shot: 연출용 고정 카메라 (위치·바라보는 곳으로 부드럽게 옮겨 간다)
+    this.shotPos = new THREE.Vector3();
+    this.shotLook = new THREE.Vector3();
+    this.lookCur = new THREE.Vector3();
+    this.shotSpeed = 2;
+  }
+
+  /** 연출 카메라: pos 에서 look 을 바라본다. instant 면 바로 옮긴다 */
+  setShot(pos, look, { instant = false, speed = 2 } = {}) {
+    if (this.mode !== 'shot') this.lookCur.copy(this.target).add(new THREE.Vector3(0, 1, 0));
+    this.mode = 'shot';
+    this.shotPos.set(pos.x, pos.y, pos.z);
+    this.shotLook.set(look.x, look.y, look.z);
+    this.shotSpeed = speed;
+    if (instant) {
+      this.camera.position.copy(this.shotPos);
+      this.lookCur.copy(this.shotLook);
+    }
   }
 
   rotate(dx) {
@@ -33,6 +51,13 @@ export class CameraController {
   }
 
   update(dt, followPos) {
+    if (this.mode === 'shot') {
+      const k = 1 - Math.exp(-this.shotSpeed * dt);
+      this.camera.position.lerp(this.shotPos, k);
+      this.lookCur.lerp(this.shotLook, k);
+      this.camera.lookAt(this.lookCur);
+      return;
+    }
     let dist = this.dist;
     if (this.mode === 'orbit') {
       this.yaw += dt * this.orbitSpeed;

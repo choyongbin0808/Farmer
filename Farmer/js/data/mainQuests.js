@@ -1,6 +1,10 @@
-// 이장 메인 퀘스트 15개 — 순서대로 1개씩 진행
+// 이장 메인 퀘스트 16개 — 순서대로 1개씩 진행 (15번째: 새 마을회관 짓기)
 // objective kind: talk, till, plant, plantedPlots, harvest, earn, sellCount, deliver, toolLevel(장비 등급),
-//                 enhance(장비 강화), relation, dayHarvest, totalEarned, talkRain, talkTimes
+//                 enhance(장비 강화), relation, dayHarvest, totalEarned, talkRain, talkTimes,
+//                 hallFund(마을회관 건축비 내기), hallBuilt(마을회관 완공)
+
+/** 새 마을회관 건축비 */
+export const HALL_COST = 20000;
 export const MAIN_QUESTS = [
   {
     id: 'main_01', title: '마을에 온 것을 환영하네', desc: '마을 사람들에게 인사를 해 보자.',
@@ -102,6 +106,21 @@ export const MAIN_QUESTS = [
     done: ['이 정도면 마을 살림도 걱정 없겠구먼.'],
     objectives: [{ kind: 'totalEarned', amount: 10000 }],
     rewards: { money: 2000 },
+  },
+  {
+    id: 'main_hall', title: '새 마을회관', desc: '마을회관을 새로 지을 건축비를 내고, 일꾼들 새참으로 감자 20개를 드리자. 하룻밤 자고 나면 완공!',
+    offer: [
+      '자네에게 마을을 맡기기 전에 꼭 하고 싶은 일이 있다네.',
+      '이 낡은 마을회관을 새로 짓는 걸세. 앞으로 자네가 일할 곳이니 번듯해야지.',
+      `건축비 ${HALL_COST.toLocaleString()}원을 내 주고, 일꾼들 새참으로 감자 스무 개를 가져다주게. 하룻밤 새에 뚝딱 지어 놓겠네.`,
+    ],
+    done: ['보게, 이 늠름한 새 마을회관을! 다 자네 덕분일세.', '이제 정말 마지막 부탁만 남았구먼.'],
+    objectives: [
+      { kind: 'hallFund', amount: HALL_COST },
+      { kind: 'deliver', to: 'chief', item: 'crop_potato', n: 20 },
+      { kind: 'hallBuilt' },
+    ],
+    rewards: { money: 3000 },
   },
   {
     id: 'main_15', title: '다음 이장에게', desc: '호박과 수박을 이장님께 드리고, 모든 주민과 3하트 이상이 되자.',

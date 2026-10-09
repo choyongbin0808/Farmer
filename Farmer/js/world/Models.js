@@ -1176,6 +1176,43 @@ export function makeHeldItem(item, toolColor = 0x8a7b6a) {
       g.add(h, ring, blade);
       g.rotation.x = 0.25;
     }
+  } else if (item.type === 'rod') {
+    // 낚싯대: 손잡이를 쥐고 앞·위로 길게 뻗는다. 끝(rodTip)에서 낚싯줄이 나간다
+    const color = item.color ?? 0xc8a050;
+    const grip = mesh(cyl(0.024, 0.026, 0.26, 10), mat(0x3a2a20, { roughness: 0.7 }));
+    grip.rotation.x = Math.PI / 2;
+    grip.position.z = 0.05;
+    const reel = mesh(cyl(0.045, 0.045, 0.04, 14), surf('metal', 0x9aa0a6));
+    reel.rotation.z = Math.PI / 2;
+    reel.position.set(0, -0.05, 0.1);
+    const pole = mesh(cyl(0.008, 0.02, 1.9, 8), mat(color, { roughness: 0.45 }));
+    pole.rotation.x = Math.PI / 2;
+    pole.position.z = 1.1;
+    const tip = new THREE.Object3D();
+    tip.name = 'rodTip';
+    tip.position.z = 2.05;
+    const body = new THREE.Group();
+    body.add(grip, reel, pole, tip);
+    body.rotation.x = -0.55; // 끝이 위로 들리게
+    g.add(body);
+  } else if (item.type === 'pick') {
+    // 곡괭이: 손잡이 끝을 쥐고, 앞쪽 끝에 양쪽으로 뾰족한 머리
+    const color = item.color ?? 0x8a7b6a;
+    const metal = surf('metal', color, { roughness: 0.35 });
+    const h = mesh(cyl(0.02, 0.024, 0.7, 10), stick);
+    h.rotation.x = Math.PI / 2;
+    h.position.z = 0.26;
+    const head = mesh(rbox(0.07, 0.07, 0.12, 0.02), metal);
+    head.position.z = 0.6;
+    g.add(h, head);
+    for (const s of [-1, 1]) {
+      // 위·아래로 뻗은 날 (아래 날이 바위를 찍는다), 살짝 앞으로 휨
+      const spike = mesh(cone(0.035, 0.26, 10), metal);
+      spike.rotation.x = s > 0 ? 0.25 : Math.PI - 0.25;
+      spike.position.set(0, s * 0.15, 0.62);
+      g.add(spike);
+    }
+    g.rotation.x = 0.2;
   } else if (item.type === 'seed') {
     const bag = mesh(sphere(0.09, 14, 10), surf('fabric', 0xc8b48a));
     bag.scale.set(1, 1.3, 0.7);

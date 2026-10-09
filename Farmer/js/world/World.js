@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import {
   mat, surf, mesh, foliage, flowerGeometry, FLOWER_MAT, FLOWER_COLORS, makeBuilding, makeStorageBarn, makeAnvil, makeFurnace, makeTree, makeBush, makeFlower,
-  makeRock, makeFenceLine, makeLamp, makeBench, makeFlowerPot, makeFishingRod, makeEasel, makeLabel,
+  makeRock, makeFenceLine, makeLamp, makeBench, makeFlowerPot, makeFishingRod, makeEasel, makeLabel, LAMP_MAT,
 } from './Models.js';
 import * as TX from './Textures.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { makeMineEntrance, makeMinecart, makeClothesline, makeGrandHall, makeScaffold } from './ExtraModels.js';
 
 export const BOUNDS = 37;
 export const STREAM_Z = -32;
@@ -34,11 +35,26 @@ export const BUILDINGS = {
   hall:    { name: '마을회관',   x: 0,   z: -20, w: 10, d: 7, facing: 'south', ix: 0,     iz: -14.6 },
   grandma: { name: '김 할머니 집', x: 20, z: -17, w: 6,  d: 6, facing: 'west',  ix: 15.6,  iz: -17 },
   sua:     { name: '수아의 꽃집', x: 20,  z: -4,  w: 6,  d: 6, facing: 'west',  ix: 15.6,  iz: -4 },
+  mine:    { name: '광산',       x: 32,  z: 13,  w: 8,  d: 5, facing: 'west',  ix: 27.6,  iz: 13 },
 };
+/** 광산에서 나왔을 때 서는 자리 */
+export const MINE_DOOR = { x: 27.2, z: 13 };
+
+// 배치한 시설의 충돌체 (FacilitySystem 이 다시 만든다)
+export const facilityColliders = [];
+
+// 지금 구역의 이동 범위 (마을 / 광산)
+const VILLAGE_BOUNDS = { minX: -BOUNDS, maxX: BOUNDS, minZ: -BOUNDS, maxZ: BOUNDS };
+let zoneBounds = VILLAGE_BOUNDS;
+export function setZoneBounds(b) {
+  zoneBounds = b || VILLAGE_BOUNDS;
+}
 
 let snowCover;
 let waterNormal;
 const deco = {};
+let hallCollider = null;
+let hallUpgraded = false;
 // 길 구간 (풀 심을 때 피하기용): [x1, z1, x2, z2, 폭]
 const pathSegs = [];
 
@@ -79,7 +95,7 @@ function strip(x1, z1, x2, z2, width, material = getPathMat(), y = 0.02) {
   return m;
 }
 
-function nearPath(x, z, pad) {
+export function nearPath(x, z, pad) {
   for (const [x1, z1, x2, z2, w] of pathSegs) {
     const dx = x2 - x1, dz = z2 - z1;
     const t = THREE.MathUtils.clamp(((x - x1) * dx + (z - z1) * dz) / (dx * dx + dz * dz || 1), 0, 1);
@@ -168,6 +184,7 @@ function inZone(x, z) {
   if (z > -36 && z < -28) return true; // 시냇물
   if (x > 3 && x < 16 && z > 18 && z < 30) return true; // 꽃밭
   if (x > -2 && x < 18 && z > -30 && z < -12) return true; // 시냇물 가는 길
+  if (x > 14 && z > 4 && z < 22) return true; // 윤 씨네 · 광산 입구
   return false;
 }
 
@@ -194,6 +211,7 @@ export function buildWorld(scene) {
   scene.add(strip(-15, 20, -12.6, 20, 2, undefined, 0.022));
   scene.add(strip(-12.6, 19, -12.6, 27, 1.6, undefined, 0.023));
   scene.add(strip(0, -15, 10, -28, 1.6, undefined, 0.021));
+  scene.add(strip(24, 4, 27.6, 13, 2, undefined, 0.022)); // 광산 가는 길
 
   // 광장: 판석 포장 + 돌 경계석
   const pave = TX.pavingTex();
@@ -221,6 +239,7 @@ export function buildWorld(scene) {
   const bigTree = makeTree('round', 1.5);
   bigTree.position.set(PLAZA.x, 0, PLAZA.z);
   scene.add(bigTree);
+  buildFestival(scene);
   addCircle(PLAZA.x, PLAZA.z, 0.8);
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * Math.PI * 2;
@@ -248,7 +267,9 @@ export function buildWorld(scene) {
   }), false, true);
   water.rotation.x = -Math.PI / 2;
   water.position.set(0, 0.06, STREAM_Z);
+  water.userData = { type: 'water' }; // 낚싯대를 들고 누르면 낚시
   scene.add(water);
+  interactables.push(water);
   // 물가의 하얀 물거품 띠
   for (const side of [-1, 1]) {
     const foam = mesh(new THREE.PlaneGeometry(170, 0.35), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, transparent: true, opacity: 0.75 }), false, false);
@@ -275,7 +296,9 @@ export function buildWorld(scene) {
     hall:    makeBuilding({ w: 10, d: 7, h: 4.4, wall: 0xfff6e6, roof: 0x5eaa58, roofH: 2.8, facing: 'south', label: '마을회관', trim: 0x8a6444 }),
     grandma: makeBuilding({ w: 6, d: 6, h: 3.2, wall: 0xf2dfbc, roof: 0x9a78c8, facing: 'west', label: '김 할머니 댁', chimney: true, wallKind: 'wood', trim: 0x8a6444 }),
     sua:     makeBuilding({ w: 6, d: 6, h: 3.2, wall: 0xfff2f2, roof: 0xf08aa6, facing: 'west', label: '수아 꽃집', trim: 0x9a7058 }),
+    mine:    makeMineEntrance(),
   };
+  houseMeshes.mine.rotation.y = -Math.PI / 2; // 입구가 서쪽(마을 쪽)을 본다
   for (const [id, b] of Object.entries(BUILDINGS)) {
     const g = houseMeshes[id];
     g.position.set(b.x, 0, b.z);
@@ -284,7 +307,27 @@ export function buildWorld(scene) {
     interactables.push(g);
     const rotated = b.facing === 'east' || b.facing === 'west';
     addBoxCollider(b.x, b.z, rotated ? b.d : b.w, rotated ? b.w : b.d);
+    if (id === 'hall') hallCollider = colliders[colliders.length - 1];
   }
+  deco.hall = houseMeshes.hall;
+  addCircle(29.4, 10.4, 0.8); // 광산 앞 수레
+
+  // 새 마을회관(완공 후)과 공사 비계는 미리 만들어 두고 updateDecorations 에서 바꿔 끼운다
+  const H = BUILDINGS.hall;
+  deco.grandHall = makeGrandHall();
+  deco.grandHall.position.set(H.x, 0, H.z);
+  deco.grandHall.userData = { type: 'building', id: 'hall' };
+  deco.scaffold = makeScaffold(H.w, H.d, 5.2);
+  deco.scaffold.position.set(H.x, 0, H.z);
+  deco.scaffold.visible = false;
+  scene.add(deco.scaffold);
+
+  // 윤 씨 아주머니네 빨랫줄
+  const line = makeClothesline();
+  line.position.set(20.2, 0, 10.8);
+  scene.add(line);
+  addCircle(18.6, 10.8, 0.2);
+  addCircle(21.8, 10.8, 0.2);
 
   // 마을회관 깃발
   const pole = mesh(new THREE.CylinderGeometry(0.045, 0.06, 6, 12), surf('metal', 0xb8bcc0));
@@ -349,7 +392,7 @@ export function buildWorld(scene) {
   }
 
   // 가로등
-  const lampPos = [[-8, 5.8], [8, 5.8], [-24, 5.8], [24, 5.8], [-13.4, 12], [2, -13], [-2, -13], [-10.8, 20.8]];
+  const lampPos = [[-8, 5.8], [8, 5.8], [-24, 5.8], [24, 5.8], [-13.4, 12], [2, -13], [-2, -13], [-10.8, 20.8], [25.4, 10.2]];
   for (const [x, z] of lampPos) {
     const l = makeLamp();
     l.position.set(x, 0, z);
@@ -451,13 +494,118 @@ function boardText(text) {
   return new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 });
 }
 
+// ───────── 광장 큰 나무의 꼬마전구 (엔딩 이후 밤마다 켜진다) ─────────
+const FAIRY_COLORS = [0xffe2a0, 0xff9cc0, 0x9cd8ff, 0xc8f08a];
+const festival = { group: null, mats: [], light: null, force: false };
+
+function buildFestival(scene) {
+  const g = new THREE.Group();
+  const groups = FAIRY_COLORS.map(() => []);
+  let k = 0;
+  const add = (x, y, z) => groups[k++ % groups.length].push([x, y, z]);
+  const cx = PLAZA.x, cz = PLAZA.z;
+  // 나무 둘레를 감아 올라가는 나선
+  for (let i = 0; i < 110; i++) {
+    const t = i / 110;
+    const y = 3.5 + t * 4.4;
+    const a = t * Math.PI * 2 * 5.5;
+    const r = Math.sqrt(Math.max(0.4, 3.0 * 3.0 - (y - 5.6) ** 2)) + 0.2;
+    add(cx + Math.cos(a) * r, y, cz + Math.sin(a) * r);
+  }
+  // 나무에서 광장 가장자리 기둥으로 늘어진 전구 줄
+  const wireM = new THREE.LineBasicMaterial({ color: 0x3a3028 });
+  const poleM = surf('wood', 0x8a6a4a);
+  for (let p = 0; p < 6; p++) {
+    const a = (p / 6) * Math.PI * 2;
+    const px = cx + Math.cos(a) * 6.0, pz = cz + Math.sin(a) * 6.0;
+    const pole = mesh(new THREE.CylinderGeometry(0.06, 0.08, 3.1, 8), poleM);
+    pole.position.set(px, 1.55, pz);
+    g.add(pole);
+    const ax = cx + Math.cos(a) * 2.6, az = cz + Math.sin(a) * 2.6;
+    const pts = [];
+    for (let i = 0; i <= 12; i++) {
+      const t = i / 12;
+      const y = 4.4 + (3.05 - 4.4) * t - Math.sin(t * Math.PI) * 0.7;
+      const v = new THREE.Vector3(ax + (px - ax) * t, y, az + (pz - az) * t);
+      pts.push(v);
+      if (i > 0 && i < 12) add(v.x, v.y - 0.08, v.z);
+    }
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireM));
+  }
+  const bulbGeo = new THREE.SphereGeometry(0.075, 8, 6);
+  const tmp = new THREE.Object3D();
+  groups.forEach((pts, i) => {
+    const m = new THREE.MeshStandardMaterial({ color: FAIRY_COLORS[i], emissive: FAIRY_COLORS[i], emissiveIntensity: 0, roughness: 0.4 });
+    const inst = new THREE.InstancedMesh(bulbGeo, m, pts.length);
+    pts.forEach(([x, y, z], j) => {
+      tmp.position.set(x, y, z);
+      tmp.updateMatrix();
+      inst.setMatrixAt(j, tmp.matrix);
+    });
+    g.add(inst);
+    festival.mats.push(m);
+  });
+  // 나무 주변을 은은하게 밝히는 불빛 (개수가 바뀌지 않게 늘 두고 밝기만 조절)
+  festival.light = new THREE.PointLight(0xffd8a0, 0, 20, 1.4);
+  festival.light.position.set(cx, 5, cz);
+  scene.add(festival.light);
+  g.visible = false;
+  scene.add(g);
+  festival.group = g;
+}
+
+/** 꼬마전구 보이기 (force 이면 낮이어도 환하게 — 엔딩 연출용) */
+export function setFestival(visible, force = false) {
+  if (!festival.group) return;
+  festival.group.visible = visible;
+  festival.force = force;
+  if (!visible) festival.light.intensity = 0;
+}
+
+function animateFestival(t) {
+  if (!festival.group?.visible) return;
+  // 밤에 가로등이 켜질 때 함께 켜진다
+  const glow = festival.force ? 1 : Math.min(1, LAMP_MAT.emissiveIntensity / 2);
+  festival.mats.forEach((m, i) => { m.emissiveIntensity = glow * (1.5 + 0.9 * Math.sin(t * 2.6 + i * 1.7)); });
+  festival.light.intensity = glow * 16;
+}
+
 export function updateDecorations(flags) {
+  setFestival(!!flags.endingSeen || festival.force, festival.force);
   if (deco.easel) deco.easel.visible = !!flags.deco_drawing;
   if (deco.rod) deco.rod.visible = !!flags.deco_rod;
+  if (deco.scaffold) deco.scaffold.visible = !!flags.hallFunded && !flags.hallBuilt;
+  setHallUpgraded(!!flags.hallBuilt);
+}
+
+/** 마을회관을 새 건물로 (또는 예전 건물로 — 새 게임을 시작할 때) 바꿔 끼운다 */
+function setHallUpgraded(on) {
+  if (!worldScene || !deco.hall || on === hallUpgraded) return;
+  hallUpgraded = on;
+  const [from, to] = on ? [deco.hall, deco.grandHall] : [deco.grandHall, deco.hall];
+  worldScene.remove(from);
+  worldScene.add(to);
+  const i = interactables.indexOf(from);
+  if (i >= 0) interactables[i] = to;
+  else interactables.push(to);
+  // 새 회관은 폭이 11m로 조금 넓고, 현관 기둥·화단이 있다
+  const H = BUILDINGS.hall;
+  const w = on ? 11 : H.w;
+  Object.assign(hallCollider, { minX: H.x - w / 2 - 0.2, maxX: H.x + w / 2 + 0.2 });
+  if (on) {
+    deco.hallExtras = [];
+    for (const x of [-3.2, -1.6, 1.6, 3.2]) deco.hallExtras.push({ x: H.x + x, z: H.z + 4.4, r: 0.25 });
+    for (const sx of [-1, 1]) deco.hallExtras.push({ minX: H.x + sx * 4.4 - 1.1, maxX: H.x + sx * 4.4 + 1.1, minZ: H.z + 4.7, maxZ: H.z + 5.5 });
+    colliders.push(...deco.hallExtras);
+  } else if (deco.hallExtras) {
+    for (const c of deco.hallExtras) colliders.splice(colliders.indexOf(c), 1);
+    deco.hallExtras = null;
+  }
 }
 
 export function updateWorld(dt, t) {
   if (waterNormal) waterNormal.offset.x -= dt * 0.04;
+  animateFestival(t);
   for (const c of clouds) {
     c.position.x += c.userData.speed * dt;
     if (c.position.x > 120) c.position.x = -120;
@@ -552,10 +700,44 @@ export function farmRoute(from, to) {
   return best;
 }
 
+/**
+ * 시설을 놓을 수 있는 자리인지 검사. 못 놓으면 이유 문구, 놓을 수 있으면 null
+ * rect: { minX, maxX, minZ, maxZ }, ignore: 검사에서 뺄 충돌체(옮기는 중인 시설 자기 자신)
+ * keepClear: 비워 둬야 하는 지점 [{ x, z }] (주민 자리 · 건물 출입구)
+ */
+export function placementBlocked(rect, { ignore = null, keepClear = [] } = {}) {
+  const pad = 0.25;
+  const L = BOUNDS - 1.5;
+  if (rect.minX < -L || rect.maxX > L || rect.minZ < -L || rect.maxZ > L) return '마을 가장자리라 놓을 수 없어요';
+  if (rect.minZ < STREAM_Z + 3.4) return '시냇물에 너무 가까워요';
+  const farm = farmRect(8);
+  if (rect.maxX > farm.x1 - pad && rect.minX < farm.x2 + pad && rect.maxZ > farm.z1 - pad && rect.minZ < farm.z2 + pad) return '밭(최대로 넓힐 자리)과 겹쳐요';
+  const cx = THREE.MathUtils.clamp(PLAZA.x, rect.minX, rect.maxX), cz = THREE.MathUtils.clamp(PLAZA.z, rect.minZ, rect.maxZ);
+  if (Math.hypot(cx - PLAZA.x, cz - PLAZA.z) < 7.2) return '광장에는 놓을 수 없어요';
+  for (const list of [colliders, fenceColliders, facilityColliders]) for (const c of list) {
+    if (c === ignore) continue;
+    if ('r' in c) {
+      const px = THREE.MathUtils.clamp(c.x, rect.minX, rect.maxX), pz = THREE.MathUtils.clamp(c.z, rect.minZ, rect.maxZ);
+      if (Math.hypot(px - c.x, pz - c.z) < c.r + pad) return '다른 물건과 겹쳐요';
+    } else if (rect.maxX > c.minX - pad && rect.minX < c.maxX + pad && rect.maxZ > c.minZ - pad && rect.minZ < c.maxZ + pad) {
+      return c.minX < -70 ? '시냇물에 너무 가까워요' : '건물이나 다른 시설과 겹쳐요';
+    }
+  }
+  for (let x = rect.minX; x <= rect.maxX + 0.01; x += 0.5) {
+    for (let z = rect.minZ; z <= rect.maxZ + 0.01; z += 0.5) {
+      if (nearPath(x, z, 0.15)) return '길 위에는 놓을 수 없어요';
+    }
+  }
+  for (const p of keepClear) {
+    if (p.x > rect.minX - 1.4 && p.x < rect.maxX + 1.4 && p.z > rect.minZ - 1.4 && p.z < rect.maxZ + 1.4) return '주민이나 건물 입구를 막아요';
+  }
+  return null;
+}
+
 export function resolveCollision(pos, radius = 0.4) {
-  pos.x = THREE.MathUtils.clamp(pos.x, -BOUNDS, BOUNDS);
-  pos.z = THREE.MathUtils.clamp(pos.z, -BOUNDS, BOUNDS);
-  for (const list of [colliders, fenceColliders]) for (const c of list) {
+  pos.x = THREE.MathUtils.clamp(pos.x, zoneBounds.minX, zoneBounds.maxX);
+  pos.z = THREE.MathUtils.clamp(pos.z, zoneBounds.minZ, zoneBounds.maxZ);
+  for (const list of [colliders, fenceColliders, facilityColliders]) for (const c of list) {
     if ('r' in c) {
       const dx = pos.x - c.x, dz = pos.z - c.z;
       const d = Math.hypot(dx, dz);

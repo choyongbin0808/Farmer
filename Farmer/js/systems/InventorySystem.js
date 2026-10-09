@@ -3,10 +3,17 @@ import { EventBus } from '../core/EventBus.js';
 import { getItem } from '../data/items.js';
 import { StorageSystem } from './StorageSystem.js';
 
+/** 아이템 종류 → 가방 칸(탭). 목록에 없는 종류(재료·특별 아이템 등)는 '물품' */
+const AREA_OF_TYPE = {
+  seed: 'seed', crop: 'crop', food: 'food',
+  pick: 'mining', ore: 'mining',
+  rod: 'fishing', fish: 'fishing',
+  facility: 'facility',
+};
+
 /** 아이템이 들어갈 가방 칸(탭) */
 export function bagAreaOf(id) {
-  const type = getItem(id)?.type;
-  return type === 'seed' || type === 'crop' || type === 'food' ? type : 'misc';
+  return AREA_OF_TYPE[getItem(id)?.type] ?? 'misc';
 }
 
 function arr(area) {
@@ -76,6 +83,67 @@ export const InventorySystem = {
     }
     EventBus.emit('inventory');
     return left;
+  },
+
+  /** 낚싯대·곡괭이: 핫바 빈칸에 먼저 넣고, 없으면 가방(물품). 다 차 있으면 false */
+  addTool(id) {
+    const i = G.state.hotbar.indexOf(null);
+    if (i >= 0) {
+      G.state.hotbar[i] = { id, n: 1 };
+      EventBus.emit('inventory');
+      return true;
+    }
+    return this.add(id, 1) === 0;
+  },
+
+  /** 가방에 넣고, 넘치는 만큼은 창고로 보낸다. 창고로 간 개수 반환 */
+  addOrStore(id, n) {
+    const left = this.add(id, n);
+    if (left > 0) StorageSystem.add(id, left);
+    return left;
+  },
+
+  /** 잡은 물고기 한 마리를 가방 '낚시' 칸에 넣는다 (무게가 있어 한 칸에 한 마리). 자리가 없으면 false */
+  addFish(c) {
+    const list = G.state.bag.fishing;
+    const i = list.indexOf(null);
+    if (i < 0) return false;
+    list[i] = { id: c.id, n: 1, w: c.w };
+    EventBus.emit('inventory');
+    return true;
+  },
+
+  /** 가방 칸(또는 핫바)의 빈자리 수 */
+  freeSlots(area) {
+    return arr(area).filter((s) => !s).length;
+  },
+
+  /** 가방·핫바에 있는 물고기·게 [{ area, index, slot }] */
+  fishSlots() {
+    const out = [];
+    for (const a of ALL_AREAS) {
+      arr(a).forEach((s, index) => {
+        if (s && getItem(s.id)?.type === 'fish') out.push({ area: a, index, slot: s });
+      });
+    }
+    return out;
+  },
+
+  /** 가방·핫바에 이 종류(type)의 아이템이 하나라도 있는지 */
+  hasType(type) {
+    return ALL_AREAS.some((a) => arr(a).some((s) => s && getItem(s.id)?.type === type));
+  },
+
+  /** 가진 것 중 가장 좋은 (tier가 가장 높은) 이 종류의 아이템 id */
+  bestOfType(type) {
+    let best = null;
+    for (const a of ALL_AREAS) {
+      for (const s of arr(a)) {
+        const it = s && getItem(s.id);
+        if (it?.type === type && (!best || it.tier > getItem(best).tier)) best = s.id;
+      }
+    }
+    return best;
   },
 
   count(id) {

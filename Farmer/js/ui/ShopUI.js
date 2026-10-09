@@ -9,11 +9,14 @@ import { OutfitSystem } from '../systems/OutfitSystem.js';
 import { InventorySystem } from '../systems/InventorySystem.js';
 import { StorageSystem } from '../systems/StorageSystem.js';
 import { AudioManager } from '../core/AudioManager.js';
-import { openModal, refreshModal, tabsHTML, bindTabs } from './Panels.js';
+import { FACILITIES, FACILITY_ORDER } from '../data/facilities.js';
+import { getItem } from '../data/items.js';
+import { FacilitySystem } from '../systems/FacilitySystem.js';
+import { openModal, refreshModal, closeModal, tabsHTML, bindTabs } from './Panels.js';
 import { toast } from './HUD.js';
 import { gearIconSVG } from './GearIcons.js';
 
-const TABS = [['seed', '🌱 씨앗 구매'], ['goods', '🍞 음식·잡화·옷 구매'], ['gear', '🔧 장비 구매'], ['sell', '💰 작물 판매']];
+const TABS = [['seed', '🌱 씨앗 구매'], ['goods', '🍞 음식·잡화·옷 구매'], ['gear', '🔧 장비 구매'], ['facility', '🏡 시설·흙'], ['sell', '💰 작물 판매']];
 let tab = 'seed';
 let gearKind = 'hoe';
 
@@ -92,6 +95,36 @@ function gearTab() {
     <div class="note">🔧 장비는 직책과 상관없이 살 수 있지만, <b>착용은 직책이 올라야</b> 가능해요 (등급 1단계 = 직책 1단계).<br>산 장비는 가방의 '장비' 탭에서 장착하고, 대장간에서 장비마다 따로 강화할 수 있어요.</div></div>`;
 }
 
+function facilityTab() {
+  const money = G.state.player.money;
+  const soil = getItem('soil_plain');
+  const soilRow = `<div class="shop-row">
+    <span class="ico big">${soil.icon}</span>
+    <div class="info"><b>${soil.name}</b> <small>${soil.price}원 · ${soil.desc}</small><small class="have">가방에 ${InventorySystem.count('soil_plain')}개</small></div>
+    <div class="qty">${qtyButtons('soil_plain')}</div>
+  </div>`;
+  const rows = FACILITY_ORDER.map((kind) => {
+    const f = FACILITIES[kind];
+    const owned = FacilitySystem.ownedCount(kind);
+    const stock = FacilitySystem.stockCount(kind);
+    const placed = owned - stock;
+    const full = owned >= f.max;
+    return `<div class="shop-row">
+      <span class="ico big">${f.icon}</span>
+      <div class="info"><b>${f.name}</b> <span class="tag">${f.w}×${f.d}m</span>
+        <small>${f.desc}</small>
+        <small>${formatMoney(f.price)}원 · 보유 ${owned}/${f.max} (배치 ${placed} · 가방 ${stock})</small></div>
+      <div class="qty">
+        ${stock ? `<button class="btn small primary" data-place="${kind}">📐 배치하기</button>` : ''}
+        <button class="btn small ${stock ? '' : 'primary'}" data-fac="${kind}" ${full || money < f.price ? 'disabled' : ''}>${full ? '최대 보유' : `구매 ${formatMoney(f.price)}원`}</button>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div class="shop-list scroll">${soilRow}${rows}
+    <div class="note">🏡 시설은 사서 <b>원하는 빈 땅에 직접 놓아요</b> (길·밭·광장·건물 입구 위는 안 돼요). 놓은 시설을 누르면 사용하거나 위치를 옮길 수 있어요.<br>
+    🍲 약탕기: 일반 흙 1 + 타우린 3 + 키토산 1 → 토양 흙 1 · 🏡 육묘장: 씨앗 1 + 토양 흙 1 → 모종 1 (3배 빨리 자람)</div></div>`;
+}
+
 function sellTab() {
   const list = ShopSystem.sellableCrops();
   const total = list.reduce((s, e) => s + e.crop.sellPrice * e.n, 0);
@@ -115,12 +148,20 @@ function render(body) {
   body.innerHTML = `
     <div class="shop-top">🧑‍💼 최 사장: "필요한 거 있으면 말씀만 하세요!" <span class="money">💰 ${formatMoney(G.state.player.money)}원</span></div>
     ${tabsHTML(TABS, tab)}
-    ${tab === 'seed' ? seedTab() : tab === 'goods' ? goodsTab() : tab === 'gear' ? gearTab() : sellTab()}`;
+    ${tab === 'seed' ? seedTab() : tab === 'goods' ? goodsTab() : tab === 'gear' ? gearTab() : tab === 'facility' ? facilityTab() : sellTab()}`;
   bindTabs(body, (t) => { tab = t; refreshModal('shop'); });
   body.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { gearKind = b.dataset.kind; refreshModal('shop'); }));
   body.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click', () => ShopSystem.buy(b.dataset.buy, Number(b.dataset.n))));
   body.querySelectorAll('[data-cloth]').forEach((b) => b.addEventListener('click', () => ShopSystem.buyCloth(b.dataset.cloth)));
   body.querySelectorAll('[data-gear]').forEach((b) => b.addEventListener('click', () => ShopSystem.buyGear(b.dataset.gear)));
+  body.querySelectorAll('[data-fac]').forEach((b) => b.addEventListener('click', () => {
+    const kind = b.dataset.fac;
+    if (FacilitySystem.buy(kind)) toast(`${FACILITIES[kind].icon} ${FACILITIES[kind].name}을(를) 샀어요! 가방 '시설' 탭에 있어요 — '배치하기'로 원하는 곳에 놓아요`, 'good');
+  }));
+  body.querySelectorAll('[data-place]').forEach((b) => b.addEventListener('click', () => {
+    closeModal();
+    FacilitySystem.startPlacement(b.dataset.place);
+  }));
   body.querySelectorAll('[data-sell]').forEach((b) => b.addEventListener('click', () => {
     const money = ShopSystem.sell(b.dataset.sell, Number(b.dataset.n));
     if (money) {
@@ -136,6 +177,6 @@ export const ShopUI = {
     openModal('shop', '🛒 상점', render, { wide: true });
   },
   init() {
-    for (const evt of ['money', 'inventory', 'storage', 'outfit', 'gear', 'rank']) EventBus.on(evt, () => refreshModal('shop'));
+    for (const evt of ['money', 'inventory', 'storage', 'outfit', 'gear', 'rank', 'facility']) EventBus.on(evt, () => refreshModal('shop'));
   },
 };

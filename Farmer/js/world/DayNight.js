@@ -37,7 +37,32 @@ export function isNight(minutes) {
   return h >= 18.7 || h < 5.5;
 }
 
-export function updateDayNight(minutes, weather, focus) {
+const MINE_DARK = new THREE.Color(0x1c1612);
+
+/** 광산 안: 하늘·날씨와 상관없이 어둑하고 따뜻한 등불 조명 */
+function updateMineLight(focus) {
+  const u = SM.sky.material.uniforms;
+  u.top.value.copy(MINE_DARK);
+  u.bottom.value.copy(MINE_DARK);
+  SM.scene.fog.color.copy(MINE_DARK);
+  SM.scene.fog.density = 0.02;
+  SM.scene.background.copy(MINE_DARK);
+  SM.hemi.color.setHex(0xffe2b8);
+  SM.hemi.groundColor.setHex(0x4a3a2a);
+  SM.hemi.intensity = 0.95;
+  SM.sun.position.set(focus.x - 8, 30, focus.z + 12);
+  SM.sun.target.position.set(focus.x, 0, focus.z);
+  SM.sun.color.setHex(0xffd49a);
+  SM.sun.intensity = 0.55;
+  SM.updateEnvironment('mine');
+  WINDOW_MAT.emissiveIntensity = 0;
+  LAMP_MAT.emissiveIntensity = 2;
+}
+
+export function updateDayNight(minutes, weather, focus, inMine = false) {
+  if (inMine) return updateMineLight(focus);
+  SM.hemi.color.setHex(0xe2f0ff);
+  SM.hemi.groundColor.setHex(0xb8a888);
   let h = minutes / 60;
   if (h < 5) h += 24;
   let i = 0;

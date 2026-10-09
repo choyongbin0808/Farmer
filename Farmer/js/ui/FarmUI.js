@@ -1,6 +1,10 @@
 import { G, FARM_MAX, formatMoney } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
-import { CROPS, stars } from '../data/crops.js';
+import { CROPS, stars, plotDays, seedlingDays } from '../data/crops.js';
+import { getItem } from '../data/items.js';
+import { InventorySystem } from '../systems/InventorySystem.js';
+import { AudioManager } from '../core/AudioManager.js';
+import { itemIconHTML, toast } from './HUD.js';
 import { harvestText } from '../data/tools.js';
 import { FarmSystem, EXPAND_COSTS } from '../systems/FarmSystem.js';
 import { StaminaSystem } from '../systems/StaminaSystem.js';
@@ -65,8 +69,9 @@ function renderInfo(body) {
   const c = CROPS[d.cropId];
   const s = G.state;
   const stage = plot.stage();
-  const left = Math.max(0, c.days - d.daysGrown);
-  const pct = Math.round((Math.min(d.daysGrown, c.days) / c.days) * 100);
+  const days = plotDays(d);
+  const left = Math.max(0, days - d.daysGrown);
+  const pct = Math.round((Math.min(d.daysGrown, days) / days) * 100);
   const sickle = GearSystem.stats('sickle');
   const [hMin, hMax] = sickle.harvest;
   const income = hMin === hMax ? `${formatMoney(c.sellPrice * hMin)}원` : `${formatMoney(c.sellPrice * hMin)}~${formatMoney(c.sellPrice * hMax)}원`;
@@ -87,16 +92,16 @@ function renderInfo(body) {
     <div class="crop-info">
       <div class="ci-head">
         <span class="ci-icon">${c.icon}</span>
-        <div><h3>${c.name}</h3><span class="stars">${stars(c.grade)}</span> <small>${c.grade}등급 작물</small></div>
+        <div><h3>${c.name}${d.seedling ? ' <small class="tag good">🪴 모종</small>' : ''}</h3><span class="stars">${stars(c.grade)}</span> <small>${c.grade}등급 작물</small></div>
         <span class="ci-stage">${STAGE_NAMES[stage]}</span>
       </div>
       <div class="ci-bar"><div style="width:${pct}%"></div></div>
-      <div class="ci-bar-label">성장 ${Math.min(d.daysGrown, c.days)} / ${c.days}일 (${pct}%)</div>
+      <div class="ci-bar-label">성장 ${Math.min(d.daysGrown, days)} / ${days}일 (${pct}%)</div>
       <div class="ci-grid">
         <div><span>⏰ 다 자라는 날</span>${when}</div>
         <div><span>💧 물 상태</span>${water}</div>
         <div><span>📅 심은 날</span>${d.plantedDay ? `${d.plantedDay}일차` : '-'}</div>
-        <div><span>🌱 총 성장 기간</span>${c.days}일 (물 준 날만 자라요)</div>
+        <div><span>🌱 총 성장 기간</span>${days}일 (물 준 날만 자라요)${d.seedling ? `<small>모종이라 씨앗(${c.days}일)보다 3배 빨라요</small>` : ''}</div>
         <div><span>💰 판매가</span>개당 ${formatMoney(c.sellPrice)}원</div>
         <div><span>🧺 예상 수확</span>${harvestText(sickle.harvest)} · ${income}<small>${GearSystem.displayName(GearSystem.equippedId('sickle'))} 기준</small></div>
         <div><span>⚡ 심기 체력</span>${StaminaSystem.plantCost(d.cropId)} (기본 ${c.staminaCost})</div>
@@ -106,7 +111,57 @@ function renderInfo(body) {
     </div>`;
 }
 
+// ───── 씨앗 고르기 (갈고 물 준 밭을 씨앗 없이 눌렀을 때) ─────
+/** 가방(씨앗 칸)·핫바에 있는 씨앗·모종을 종류별로: [{ id, item, n, ref: { area, index } }] */
+function ownedSeeds() {
+  const map = new Map();
+  for (const area of ['hotbar', 'seed']) {
+    InventorySystem.slots(area).forEach((s, index) => {
+      const item = s && getItem(s.id);
+      if (item?.type !== 'seed') return;
+      if (!map.has(s.id)) map.set(s.id, { id: s.id, item, n: 0, ref: { area, index } });
+      map.get(s.id).n += s.n;
+    });
+  }
+  // 모종 먼저, 그다음 작물 등급 순
+  return [...map.values()].sort((a, b) => (b.item.seedling ? 1 : 0) - (a.item.seedling ? 1 : 0) || CROPS[a.item.cropId].grade - CROPS[b.item.cropId].grade);
+}
+
+let pickCb = null;
+
+function renderSeedPicker(body) {
+  const seeds = ownedSeeds();
+  body.innerHTML = `
+    <div class="shop-top"><span>🌱 이 밭에 무엇을 심을까요? <small>고른 씨앗은 손에 들려서, 다른 밭도 바로 눌러 심을 수 있어요</small></span></div>
+    <div class="seed-grid seed-pick-grid">${seeds.map((e) => {
+      const c = CROPS[e.item.cropId];
+      const days = e.item.seedling ? seedlingDays(e.item.cropId) : c.days;
+      return `<button class="seed-pick" data-id="${e.id}">
+        ${itemIconHTML(e.id)}<b>${e.item.name}</b>
+        <small>${e.n}개 · ${days}일${e.item.seedling ? ' (모종)' : ''} · ⚡${StaminaSystem.plantCost(e.item.cropId)}</small>
+      </button>`;
+    }).join('')}</div>`;
+  body.querySelectorAll('[data-id]').forEach((b) => b.addEventListener('click', () => {
+    const e = seeds.find((x) => x.id === b.dataset.id);
+    const cb = pickCb;
+    pickCb = null;
+    closeModal();
+    cb?.(e.ref);
+  }));
+}
+
 export const FarmUI = {
+  /** 심을 씨앗을 고르게 하고, 고르면 onPick({ area, index }) */
+  openSeedPicker(onPick) {
+    if (!ownedSeeds().length) {
+      AudioManager.sfx('error');
+      toast('🌱 가방에 씨앗이 없어요. 상점에서 씨앗을 사 오세요', 'warn');
+      return;
+    }
+    pickCb = onPick;
+    openModal('seedPick', '🌱 씨앗 고르기', renderSeedPicker, { onClose: () => { pickCb = null; } });
+  },
+
   openExpand() {
     openModal('farmExpand', '🌾 밭 확장', renderExpand, { wide: true });
   },

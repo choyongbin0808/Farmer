@@ -1,4 +1,4 @@
-import { G, FARM_MAX, HOTBAR_SIZE, createNewState, newPlot, newBag, newHotbar } from './Game.js';
+import { G, FARM_MAX, HOTBAR_SIZE, SAVE_VERSION, BAG_AREAS, createNewState, newPlot, newBag, newHotbar } from './Game.js';
 import { GEAR, TOOLS, TOOL_ORDER, startingGear } from '../data/tools.js';
 import { getItem } from '../data/items.js';
 import { bagAreaOf } from '../systems/InventorySystem.js';
@@ -99,6 +99,91 @@ function migrateHotbar(data) {
   }
 }
 
+/**
+ * 가방 탭이 늘어남(채광 · 낚시 · 시설): 새 탭을 만들고, 제자리가 아닌 아이템을 알맞은 탭으로 옮긴다.
+ * 예전 어망(fishing.creel)의 물고기는 '낚시' 칸으로, 배치 전 시설 수(facilityStock)는 '시설' 칸 아이템으로.
+ */
+function migrateBagAreas(data) {
+  const bag = data.bag;
+  if (!bag) return;
+  const fresh = newBag();
+  for (const a of BAG_AREAS) {
+    if (!Array.isArray(bag[a])) bag[a] = fresh[a];
+    while (bag[a].length < fresh[a].length) bag[a].push(null);
+  }
+  for (const a of BAG_AREAS) {
+    bag[a].forEach((s, i) => {
+      if (!s || !getItem(s.id)) return;
+      const want = bagAreaOf(s.id);
+      if (want === a) return;
+      const j = bag[want].indexOf(null);
+      if (j < 0) return;
+      bag[want][j] = s;
+      bag[a][i] = null;
+    });
+  }
+  const creel = data.fishing?.creel;
+  if (Array.isArray(creel)) {
+    for (const c of creel) {
+      const j = bag.fishing.indexOf(null);
+      if (j < 0 || !getItem(c.id)) continue;
+      bag.fishing[j] = { id: c.id, n: 1, w: c.w };
+    }
+    delete data.fishing.creel;
+  }
+  if (data.facilityStock) {
+    for (const [kind, n] of Object.entries(data.facilityStock)) {
+      const j = bag.facility.indexOf(null);
+      if (n > 0 && j >= 0) bag.facility[j] = { id: `fac_${kind}`, n };
+    }
+    delete data.facilityStock;
+  }
+}
+
+/**
+ * 버전 1 → 2: 메인 퀘스트 15번째에 '새 마을회관'이 끼어들었다.
+ * 이미 마지막 퀘스트까지 끝낸 세이브는 회관도 지은 것으로, 마지막 퀘스트를 하던 세이브는 회관 퀘스트부터 다시 받는다.
+ */
+function migrateQuests(data) {
+  if ((data.version ?? 1) >= SAVE_VERSION || !data.quests) return;
+  const q = data.quests;
+  data.flags = data.flags || {};
+  if (q.mainIndex >= 15) {
+    q.mainIndex = 16;
+    data.flags.hallFunded = true;
+    data.flags.hallBuilt = true;
+  } else if (q.mainIndex === 14) {
+    q.main = null;
+    if (q.tracked === 'main_15') q.tracked = null;
+  }
+  data.version = SAVE_VERSION;
+}
+
+/**
+ * 도감 기록이 생기기 전 세이브: 지금 가진 것(창고·가방·핫바)으로 기록을 채워 시작한다.
+ * 작물·광석은 가진 개수를 수확·채굴 수로, 잡아 본 물고기(최고 무게 기록)는 최소 1마리로.
+ */
+function migrateBook(data) {
+  const owned = {};
+  const count = (id, n) => { owned[id] = (owned[id] || 0) + n; };
+  for (const [id, n] of Object.entries(data.storage || {})) count(id, n);
+  for (const list of [data.hotbar || [], ...Object.values(data.bag || {})]) {
+    for (const s of list) if (s) count(s.id, s.n || 1);
+  }
+  if (data.stats && !data.stats.harvested) {
+    data.stats.harvested = {};
+    for (const [id, n] of Object.entries(owned)) if (id.startsWith('crop_')) data.stats.harvested[id.slice(5)] = n;
+  }
+  if (data.mine && !data.mine.mined) {
+    data.mine.mined = {};
+    for (const [id, n] of Object.entries(owned)) if (id.startsWith('ore_')) data.mine.mined[id] = n;
+  }
+  if (data.fishing && !data.fishing.counts) {
+    data.fishing.counts = {};
+    for (const id of Object.keys(data.fishing.best || {})) data.fishing.counts[id] = 1;
+  }
+}
+
 export function loadGame() {
   const raw = localStorage.getItem(KEY);
   if (!raw) return null;
@@ -107,7 +192,10 @@ export function loadGame() {
     migrateFarm(data);
     migrateTools(data);
     migrateBag(data);
+    migrateBagAreas(data);
     migrateHotbar(data);
+    migrateQuests(data);
+    migrateBook(data);
     return mergeDefaults(data, createNewState(data.player?.name || '귀농인'));
   } catch (e) {
     console.warn('세이브 데이터를 불러오지 못했습니다.', e);

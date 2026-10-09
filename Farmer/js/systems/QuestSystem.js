@@ -1,13 +1,15 @@
-import { G, RESIDENTS } from '../core/Game.js';
+import { G, RESIDENTS, currentZone } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { saveGame } from '../core/SaveManager.js';
-import { MAIN_QUESTS } from '../data/mainQuests.js';
+import { MAIN_QUESTS, HALL_COST } from '../data/mainQuests.js';
 import { SUB_QUESTS } from '../data/subQuests.js';
 import { CROPS } from '../data/crops.js';
 import { NPCS } from '../data/npcs.js';
 import { CLOTHES } from '../data/clothes.js';
-import { getItem } from '../data/items.js';
+import { getItem, isHandTool } from '../data/items.js';
+import { StorageSystem } from './StorageSystem.js';
+import { MINE_EXIT } from '../world/Mine.js';
 import { TOOL_ORDER, TIERS } from '../data/tools.js';
 import { InventorySystem } from './InventorySystem.js';
 import { GearSystem } from './GearSystem.js';
@@ -15,7 +17,7 @@ import { RelationSystem } from './RelationSystem.js';
 import { OutfitSystem } from './OutfitSystem.js';
 import { FarmSystem, EXPAND_COSTS } from './FarmSystem.js';
 import { RankSystem } from './RankSystem.js';
-import { updateDecorations, farmCenter, PLAZA } from '../world/World.js';
+import { updateDecorations, farmCenter, PLAZA, BUILDINGS, MINE_DOOR } from '../world/World.js';
 import { toast, banner } from '../ui/HUD.js';
 
 const SUB_BY_ID = Object.fromEntries(SUB_QUESTS.map((q) => [q.id, q]));
@@ -119,6 +121,12 @@ export const QuestSystem = {
       case 'talkTimes':
         cur = p.done ? o.count : p.day === s.time.day ? p.n : 0; need = o.count; label = `하루 동안 ${npcName(o.npc)}와(과) 대화하기`;
         break;
+      case 'hallFund':
+        cur = s.flags.hallFunded ? 1 : 0; need = 1; label = `이장님께 건축비 ${o.amount.toLocaleString()}원 내기`;
+        break;
+      case 'hallBuilt':
+        cur = s.flags.hallBuilt ? 1 : 0; need = 1; label = s.flags.hallFunded ? '새 마을회관 완공 (하룻밤 자고 나면)' : '새 마을회관 완공';
+        break;
       default:
         break;
     }
@@ -145,6 +153,7 @@ export const QuestSystem = {
     for (const q of SUB_QUESTS) {
       if (q.giver !== npcId || s.quests.subs[q.id]) continue;
       const r = q.req || {};
+      if (r.mainDone && s.quests.mainIndex < r.mainDone) continue;
       if (r.prev && s.quests.subs[r.prev]?.status !== 'done') continue;
       if (r.hearts && RelationSystem.hearts(npcId) < r.hearts) continue;
       out.push(q);
@@ -220,9 +229,14 @@ export const QuestSystem = {
       EventBus.emit('money');
     }
     for (const it of r.items || []) {
-      const left = InventorySystem.add(it.id, it.n);
-      msgs.push(`${getItem(it.id).icon} ${getItem(it.id).name} x${it.n}`);
-      if (left > 0) toast('가방이 가득 차서 일부 보상을 받지 못했어요', 'warn');
+      const item = getItem(it.id);
+      if (isHandTool(item)) {
+        // 낚싯대·곡괭이는 바로 쓸 수 있게 핫바 빈칸으로
+        if (!InventorySystem.addTool(it.id)) StorageSystem.add(it.id, 1);
+      } else {
+        InventorySystem.addOrStore(it.id, it.n);
+      }
+      msgs.push(`${item.icon} ${item.name} x${it.n}`);
     }
     for (const id of r.clothes || []) {
       OutfitSystem.addClothes(id);
@@ -242,6 +256,7 @@ export const QuestSystem = {
       if (f === 'discount') msgs.push('🔨 강화 비용 10% 할인');
       if (f === 'deco_drawing') msgs.push('🖼️ 민지의 그림 (집 앞 장식)');
       if (f === 'deco_rod') msgs.push('🎣 낚싯대 장식 (집 앞)');
+      if (f === 'mine') msgs.push('⛏️ 광산 출입 허가 (마을 동쪽 끝)');
     }
     updateDecorations(s.flags);
     for (const [npc, v] of Object.entries(r.relation || {})) RelationSystem.add(npc, v);
@@ -249,52 +264,132 @@ export const QuestSystem = {
   },
 
   // ─── NPC 머리 위 아이콘 ───
+  /**
+   * 머리 위 표시: ✅ 완료 보고·전달할 수 있음 / ❗(빨강) 진행 중인 퀘스트와 관련된 사람
+   * 아직 받지 않은 퀘스트는 표시하지 않는다 (퀘스트 창의 '받을 수 있는 퀘스트'에서 확인)
+   */
   npcIcon(npcId) {
     if (this.completableFor(npcId).length || this.deliverablesFor(npcId).length) return '✅';
-    if (this.offersFor(npcId).length) return '❗';
+    if (this.inProgressWith(npcId)) return '❗';
     return null;
   },
 
+  /** 진행 중인 퀘스트를 준 사람이거나, 아직 끝나지 않은 목표의 상대(대화·전달)인지 */
+  inProgressWith(npcId) {
+    if (npcId === 'han' && G.state.flags.mine && !G.state.flags.gotPickaxe) return true;
+    return this.active().some(({ q, rec }) => {
+      if (q.giver === npcId) return true;
+      return q.objectives.some((o, i) => {
+        const p = rec.progress[i];
+        if (o.kind === 'talk') return o.targets.includes(npcId) && !p.list.includes(npcId);
+        if (o.kind === 'deliver') return o.to === npcId && !p.done;
+        if (o.kind === 'talkRain' || o.kind === 'talkTimes') return o.npc === npcId && !p.done;
+        return false;
+      });
+    });
+  },
+
+  // ─── 새 마을회관 ───
+  /** 회관 퀘스트를 받았고 아직 건축비를 안 냈는지 */
+  canFundHall() {
+    const m = this.currentMain();
+    return !!(m?.objectives.some((o) => o.kind === 'hallFund') && G.state.quests.main && !G.state.flags.hallFunded);
+  },
+
+  fundHall() {
+    const s = G.state;
+    if (!this.canFundHall()) return false;
+    if (s.player.money < HALL_COST) {
+      AudioManager.sfx('error');
+      toast(`건축비가 모자라요 (${HALL_COST.toLocaleString()}원 필요)`, 'warn');
+      return false;
+    }
+    s.player.money -= HALL_COST;
+    s.flags.hallFunded = true;
+    updateDecorations(s.flags);
+    AudioManager.sfx('anvil');
+    banner('🏗️ 마을회관 공사 시작!', '하룻밤 자고 나면 새 마을회관이 완공돼요');
+    EventBus.emit('money');
+    EventBus.emit('quests');
+    saveGame();
+    return true;
+  },
+
+  /** 잠자고 일어날 때: 건축비를 냈으면 회관 완공 */
+  finishHallOvernight() {
+    const s = G.state;
+    if (!s.flags.hallFunded || s.flags.hallBuilt) return false;
+    s.flags.hallBuilt = true;
+    updateDecorations(s.flags);
+    EventBus.emit('quests');
+    return true;
+  },
+
   // ─── 퀘스트 위치 ───
+  /** 다른 구역(광산 ↔ 마을)에 있는 곳이면 그 구역으로 가는 출입구를 가리킨다 */
+  zoned(pos, zone, label) {
+    const here = currentZone();
+    if (zone === here) return { ...pos, label };
+    if (here === 'village') return { ...MINE_DOOR, label: `광산 입구 → ${label}` };
+    return { ...MINE_EXIT, label: `광산 출구 → ${label}` };
+  },
+
   npcPos(id) {
     const n = G.refs.npcs?.[id];
     return n ? { x: n.pos.x, z: n.pos.z } : { x: NPCS[id].pos[0], z: NPCS[id].pos[1] };
   },
 
+  /** 주민 위치 + 이름표 + 구역 */
+  npcAt(id, label = npcName(id)) {
+    return { ...this.npcPos(id), label, zone: NPCS[id].zone ?? 'village' };
+  },
+
+  /** 위치 표시 대상 (지금 구역 기준으로, 다른 구역이면 출입구) */
   target(q) {
+    const t = this.rawTarget(q);
+    return t && this.zoned(t, t.zone ?? 'village', t.label);
+  },
+
+  rawTarget(q) {
     const rec = this.recordOf(q);
     if (!rec) return null;
     const farm = { ...farmCenter(G.state.farm.size), label: '내 밭' };
-    if (this.isComplete(q, rec)) return { ...this.npcPos(q.giver), label: `${npcName(q.giver)}에게 보고` };
+    if (this.isComplete(q, rec)) return this.npcAt(q.giver, `${npcName(q.giver)}에게 보고`);
     for (let i = 0; i < q.objectives.length; i++) {
       const o = q.objectives[i];
       const info = this.objInfo(q, o, rec.progress[i]);
       if (info.done && o.kind !== 'deliver') continue;
       if (o.kind === 'deliver') {
         if (rec.progress[i].done) continue;
-        if (info.done) return { ...this.npcPos(o.to), label: npcName(o.to) };
+        if (info.done) return this.npcAt(o.to);
         return farm;
       }
       switch (o.kind) {
         case 'talk': {
           const left = o.targets.find((t) => !rec.progress[i].list.includes(t));
-          return { ...this.npcPos(left), label: npcName(left) };
+          return this.npcAt(left);
         }
         case 'earn': case 'sellCount': case 'totalEarned':
-          return { ...this.npcPos('shop'), label: '상점' };
+          return this.npcAt('shop', '상점');
         case 'toolLevel':
-          return { ...this.npcPos('shop'), label: '상점' };
+          return this.npcAt('shop', '상점');
         case 'enhance':
-          return { ...this.npcPos('smith'), label: '대장간' };
+          return this.npcAt('smith', '대장간');
         case 'relation':
           return { x: PLAZA.x, z: PLAZA.z, label: '마을 광장' };
         case 'talkRain': case 'talkTimes':
-          return { ...this.npcPos(o.npc), label: npcName(o.npc) };
+          return this.npcAt(o.npc);
+        case 'hallFund':
+          return this.npcAt('chief', '이장님께 건축비 내기');
+        case 'hallBuilt': {
+          const h = BUILDINGS.house;
+          return { x: h.ix, z: h.iz, label: '집에서 하룻밤 자기' };
+        }
         default:
           return farm;
       }
     }
-    return { ...this.npcPos(q.giver), label: npcName(q.giver) };
+    return this.npcAt(q.giver);
   },
 
   tracked() {

@@ -6,5 +6,5 @@ export const RANKS = [
   { name: '마을 일꾼',     need: 6,  unlock: '딸기 씨앗 · 철 장비 착용' },
   { name: '마을 반장',     need: 9,  unlock: '옥수수 씨앗 · 은 장비 착용' },
   { name: '부이장',        need: 12, unlock: '호박 씨앗 · 금 장비 착용' },
-  { name: '마을 이장',     need: 15, unlock: '마을의 모든 것 · 무지개 장비 착용' },
+  { name: '마을 이장',     need: 16, unlock: '마을의 모든 것 · 무지개 장비 착용' },
 ];

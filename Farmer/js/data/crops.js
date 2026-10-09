@@ -18,6 +18,16 @@ export function isCropUnlocked(cropId, state) {
   return state.rank >= c.unlockRank;
 }
 
+/** 모종은 성장 일수가 1/3 (반올림, 최소 1일) — 예: 10일 → 3일 */
+export function seedlingDays(cropId) {
+  return Math.max(1, Math.round(CROPS[cropId].days / 3));
+}
+
+/** 밭 한 칸이 다 자라는 데 필요한 일수 (모종으로 심었으면 1/3) */
+export function plotDays(d) {
+  return d.seedling ? seedlingDays(d.cropId) : CROPS[d.cropId].days;
+}
+
 export function stars(grade) {
   return '★'.repeat(grade);
 }

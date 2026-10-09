@@ -29,7 +29,7 @@ export const StorageSystem = {
   },
 
   totalValue() {
-    return this.entries().reduce((sum, [id, n]) => sum + getItem(id).price * n, 0);
+    return this.entries().reduce((sum, [id, n]) => sum + (getItem(id).price || 0) * n, 0);
   },
 
   /** 창고 → 인벤토리 */

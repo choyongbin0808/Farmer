@@ -1,4 +1,8 @@
-// pos: 기본 위치 [x, z], face: 바라보는 방향(라디안), look: 3D 모델 외형
+import { MINE_ORIGIN } from './mining.js';
+
+const MX = MINE_ORIGIN.x, MZ = MINE_ORIGIN.z;
+
+// pos: 기본 위치 [x, z], face: 바라보는 방향(라디안), look: 3D 모델 외형, zone: 'mine'이면 광산 안에 있음
 export const NPCS = {
   chief: {
     name: '박 이장', role: '마을 이장', avatar: '👴', pos: [0, -14.6], face: 0,
@@ -91,8 +95,50 @@ export const NPCS = {
     chat: [
       '비 오는 날 시냇물은 또 다른 맛이 있지.',
       '느긋하게 사는 게 제일이야.',
+      '찌가 쏙 들어가는 순간 바로 챔질해야 해. 머뭇거리면 놓친다네.',
+      '좋은 낚싯대일수록 귀한 놈들이 잘 물지. 게는 키토산, 물고기는 타우린으로 바꿔 주겠네.',
+    ],
+  },
+  yun: {
+    name: '윤 씨 아주머니', role: '마을 주민', avatar: '👩‍🦱', pos: [18.4, 8.6], face: -Math.PI / 2,
+    look: { skin: 0xf2c8a8, top: 0xe08a6a, bottom: 0x6a5a7a, hair: 0x3a2418, hairStyle: 'bun' },
+    greet: [
+      '어머, 새로 이사 온 분이구나! 반가워요.',
+      '오늘도 빨래가 잘 마르겠네요.',
+      '우리 그이는 오늘도 광산에서 땀 흘리고 있겠지….',
+    ],
+    chat: [
+      '마을 동쪽 끝에 오래된 광산이 있어요. 우리 남편이 거기서 일한답니다.',
+      '농사일이 고되면 가끔은 바람 쐬듯 다른 일을 해 보는 것도 좋아요.',
+    ],
+  },
+  han: {
+    name: '한 반장', role: '광부', avatar: '👷', pos: [MX - 4.5, MZ + 5.5], face: 0, zone: 'mine',
+    look: { skin: 0xd8a07a, top: 0x6a7a8a, bottom: 0x4a4038, hair: 0x2a1e16, hairStyle: 'short', beard: 0x2a1e16, cap: 0xf0c03a },
+    greet: [
+      '어이, 왔는가! 광산은 언제나 열려 있네.',
+      '쿵, 쿵! 오늘도 광맥이 좋아.',
+      '먼지 조심하게. 허허.',
+    ],
+    chat: [
+      '광맥은 하룻밤 자고 나면 다시 차오르지. 캐낸 자리도 서너 시간이면 또 생긴다네.',
+      '단단한 광석은 좋은 곡괭이가 아니면 흠집도 안 나. 돌쇠한테 가 보게.',
+      '우리 집사람이 보냈다고? 허허, 그 사람 잔소리는 광산까지 들린다네.',
+    ],
+  },
+  dolsoe: {
+    name: '돌쇠', role: '곡괭이 장수', avatar: '🧑‍🔧', pos: [MX + 5, MZ + 5.5], face: 0, zone: 'mine',
+    look: { skin: 0xe8b890, top: 0x8a4a3a, bottom: 0x3e4a5a, hair: 0x5a3a20, hairStyle: 'short', cap: 0x4a6a8a },
+    greet: [
+      '곡괭이 필요해요? 튼튼한 걸로 골라 드릴게요!',
+      '좋은 곡괭이는 광석도 더 많이 캐요!',
+      '어서 와요! 오늘도 광산은 시원하죠?',
+    ],
+    chat: [
+      '곡괭이 등급이 높을수록 빨리 캐고, 가끔 광석이 여러 개 나와요.',
+      '자수정은 다이아 곡괭이가 아니면 어림도 없어요.',
     ],
   },
 };
 
-export const NPC_ORDER = ['chief', 'shop', 'smith', 'grandma', 'minji', 'sua', 'fisher'];
+export const NPC_ORDER = ['chief', 'shop', 'smith', 'grandma', 'minji', 'sua', 'fisher', 'yun', 'han', 'dolsoe'];

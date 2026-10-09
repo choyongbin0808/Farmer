@@ -5,7 +5,7 @@ import { StorageSystem } from '../systems/StorageSystem.js';
 import { openModal, refreshModal } from './Panels.js';
 
 function render(body) {
-  const entries = StorageSystem.entries().sort((a, b) => getItem(b[0]).price - getItem(a[0]).price);
+  const entries = StorageSystem.entries().sort((a, b) => (getItem(b[0]).price || 0) - (getItem(a[0]).price || 0));
   const invCrops = G.state.bag.crop.concat(G.state.hotbar)
     .filter((s) => s && getItem(s.id).type === 'crop')
     .reduce((acc, s) => { acc[s.id] = (acc[s.id] || 0) + s.n; return acc; }, {});
@@ -14,7 +14,7 @@ function render(body) {
     const it = getItem(id);
     return `<div class="shop-row">
       <span class="ico big">${it.icon}</span>
-      <div class="info"><b>${it.name}</b> <small>${n}개 · 개당 ${it.price}원 · 총 ${formatMoney(it.price * n)}원</small></div>
+      <div class="info"><b>${it.name}</b> <small>${n}개${it.price ? ` · 개당 ${it.price}원 · 총 ${formatMoney(it.price * n)}원` : ''}</small></div>
       <div class="qty">
         <button class="btn small" data-take="${id}" data-n="1">1개 꺼내기</button>
         <button class="btn small" data-take="${id}" data-n="10">10개</button>

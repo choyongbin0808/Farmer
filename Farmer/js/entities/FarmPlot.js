@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { G } from '../core/Game.js';
-import { CROPS } from '../data/crops.js';
+import { plotDays } from '../data/crops.js';
 import { makeCropModel } from '../world/Models.js';
 import { soilTex } from '../world/Textures.js';
 
@@ -48,7 +48,7 @@ export class FarmPlot {
   stage() {
     const d = this.data;
     if (d.state !== 'planted') return -1;
-    const days = CROPS[d.cropId].days;
+    const days = plotDays(d);
     if (d.daysGrown >= days) return 3;
     if (d.daysGrown === 0) return 0;
     return d.daysGrown / days < 0.5 ? 1 : 2;

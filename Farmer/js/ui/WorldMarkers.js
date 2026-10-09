@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G } from '../core/Game.js';
+import { G, currentZone } from '../core/Game.js';
 import { NPC_ORDER, NPCS } from '../data/npcs.js';
 import { QuestSystem } from '../systems/QuestSystem.js';
 
@@ -78,6 +78,44 @@ function updateWorkGauge(playerPos) {
   gaugeFill.style.width = `${prog * 100}%`;
 }
 
+// 그때그때 바뀌는 말풍선 (낚시 입질 ❗, 시설 완성 ✅ 등) — 공급자 함수가 매 프레임 목록을 돌려준다
+// 공급자: () => [{ key, text, x, y, z, cls }]
+const tagSources = [];
+const dynTags = new Map();
+
+export function addTagSource(fn) {
+  tagSources.push(fn);
+}
+
+function updateDynTags(visible) {
+  const seen = new Set();
+  if (visible && G.mode === 'play') {
+    for (const src of tagSources) {
+      for (const t of src() || []) {
+        seen.add(t.key);
+        let e = dynTags.get(t.key);
+        if (!e) {
+          e = { el: document.createElement('div'), text: null, cls: null };
+          root.appendChild(e.el);
+          dynTags.set(t.key, e);
+        }
+        if (e.text !== t.text) { e.text = t.text; e.el.textContent = t.text; }
+        const cls = `mk dyn-tag ${t.cls || ''}`;
+        if (e.cls !== cls) { e.cls = cls; e.el.className = cls; }
+        const p = project(t.x, t.y, t.z);
+        e.el.style.display = p.behind ? 'none' : '';
+        e.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
+      }
+    }
+  }
+  for (const [key, e] of dynTags) {
+    if (!seen.has(key)) {
+      e.el.remove();
+      dynTags.delete(key);
+    }
+  }
+}
+
 export function addFloatText(text, pos, color = '#fff') {
   const el = document.createElement('div');
   el.className = 'mk float-text';
@@ -89,6 +127,7 @@ export function addFloatText(text, pos, color = '#fff') {
 
 export function updateMarkers(dt, t, playerPos, visible) {
   root.classList.toggle('hidden', !visible);
+  updateDynTags(visible);
   if (!visible) {
     beacon.visible = false;
     arrow.classList.add('hidden');
@@ -118,10 +157,12 @@ export function updateMarkers(dt, t, playerPos, visible) {
       tag.last = icon;
       tag.bubble.textContent = icon;
       tag.bubble.classList.toggle('hidden', !icon);
-      tag.bubble.classList.toggle('quest', icon === '❗' || icon === '✅');
+      tag.bubble.classList.toggle('quest', icon === '✅');
+      tag.bubble.classList.toggle('progress', icon === '❗');
     }
     const showName = d < 14 || !!qIcon;
-    tag.el.classList.toggle('hidden', p.behind || (!showName && !icon));
+    const away = (NPCS[id].zone ?? 'village') !== currentZone();
+    tag.el.classList.toggle('hidden', away || p.behind || (!showName && !icon));
     tag.el.querySelector('.nm').classList.toggle('hidden', !showName);
     tag.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;
   }

@@ -47,6 +47,31 @@ export const SUB_QUESTS = [
     rewards: { clothes: ['cloth_flower_bot'] },
   },
   {
+    id: 'sub_fisher_rod', giver: 'fisher', title: '오 씨의 낚시 친구', desc: '오 씨에게 감자 3개를 가져다주자.', req: { mainDone: 3 },
+    offer: ['요즘 낚시하다 보면 출출해서 말이야.', '감자 세 개만 쪄 먹게 가져다주겠나? 그럼 내 낚시 비법을 알려 주지.'],
+    done: [
+      '고맙네! 약속대로 이 대나무 낚싯대를 주지.',
+      '핫바에서 낚싯대를 고르고 시냇물을 누르면 찌를 던진다네. 찌가 쏙 들어가며 ❗가 뜨면 바로 화면을 누르거나 Space로 챔질하게!',
+      '잡은 고기는 어망에 담기니 나한테 가져오게. 물고기는 타우린, 게는 키토산으로 바꿔 주지. 더 좋은 낚싯대도 팔고 있다네.',
+    ],
+    objectives: [{ kind: 'deliver', to: 'fisher', item: 'crop_potato', n: 3 }],
+    rewards: { items: [{ id: 'rod_bamboo', n: 1 }] },
+  },
+  {
+    id: 'sub_yun_mine', giver: 'yun', title: '광부의 도시락', desc: '윤 씨 아주머니에게 감자 5개와 무 5개를 가져다드리자.', req: { mainDone: 5 },
+    offer: ['우리 그이 도시락을 싸야 하는데, 밭일이 바빠서 장을 못 봤지 뭐예요.', '감자 다섯 개랑 무 다섯 개만 구해다 줄 수 있어요?'],
+    done: [
+      '어머, 고마워라! 덕분에 도시락을 든든하게 쌀 수 있겠어요.',
+      '사실… 우리 남편이 마을 동쪽 끝 광산에서 일하거든요.',
+      '내가 얘기해 둘 테니 이제 언제든 광산에 들어가 봐요. 남편한테 말을 걸면 곡괭이도 하나 줄 거예요!',
+    ],
+    objectives: [
+      { kind: 'deliver', to: 'yun', item: 'crop_potato', n: 5 },
+      { kind: 'deliver', to: 'yun', item: 'crop_radish', n: 5 },
+    ],
+    rewards: { money: 300, flags: ['mine'] },
+  },
+  {
     id: 'sub_fisher_1', giver: 'fisher', title: '빗속의 시냇물', desc: '비 오는 날 시냇물에서 오 씨와 이야기하자.',
     offer: ['비 오는 날 시냇물을 본 적 있나?', '언젠가 비가 오면 여기로 와 보게. 보여 줄 게 있어.'],
     done: ['어때, 빗소리랑 물소리가 어우러지니 좋지?', '이건 내가 끓인 약초차야. 몸이 확 풀릴 걸세.'],

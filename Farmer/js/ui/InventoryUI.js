@@ -2,14 +2,17 @@ import { G } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { getItem, TYPE_NAMES } from '../data/items.js';
 import { CLOTHES, SETS, SLOTS, SLOT_NAMES } from '../data/clothes.js';
-import { CROPS, stars } from '../data/crops.js';
+import { CROPS, stars, seedlingDays } from '../data/crops.js';
+import { FISH, ROD_BY_ID, weightText, catchReward } from '../data/fishing.js';
+import { PICK_BY_ID } from '../data/mining.js';
+import { FacilitySystem } from '../systems/FacilitySystem.js';
 import { TOOLS, TOOL_ORDER, GEAR, statsText } from '../data/tools.js';
 import { RANKS } from '../data/ranks.js';
-import { InventorySystem } from '../systems/InventorySystem.js';
+import { InventorySystem, bagAreaOf } from '../systems/InventorySystem.js';
 import { OutfitSystem, BASE_STAMINA } from '../systems/OutfitSystem.js';
 import { StaminaSystem } from '../systems/StaminaSystem.js';
 import { GearSystem } from '../systems/GearSystem.js';
-import { openModal, refreshModal, tabsHTML, bindTabs } from './Panels.js';
+import { openModal, refreshModal, closeModal, tabsHTML, bindTabs } from './Panels.js';
 import { slotHTML, itemIconHTML, toast } from './HUD.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { CharacterPreview } from './CharacterPreview.js';
@@ -17,7 +20,11 @@ import { gearIconSVG } from './GearIcons.js';
 
 // 씨앗·작물·음식·물품 탭은 각자 따로 된 가방 칸(state.bag[탭])을 가진다.
 // '장비' 탭은 보유한 옷과 농기구 장비를 한 격자에 모아 보여 준다.
-const TABS = [['seed', '씨앗'], ['crop', '작물'], ['food', '음식'], ['misc', '물품'], ['equip', '장비']];
+const AREA_NAMES = { seed: '씨앗', crop: '작물', food: '음식', misc: '물품', mining: '채광', fishing: '낚시', facility: '시설' };
+const TABS = [
+  ['seed', '🌱 씨앗'], ['crop', '🥕 작물'], ['food', '🍞 음식'], ['misc', '📦 물품'],
+  ['mining', '⛏️ 채광'], ['fishing', '🎣 낚시'], ['facility', '🏡 시설'], ['equip', '👕 장비'],
+];
 let tab = 'seed';
 let sel = null; // 가방·핫바 칸 { area, index }
 let eqSel = null; // 장비 탭 선택 { kind: 'cloth' | 'gear', id }
@@ -157,13 +164,24 @@ function equipDetailHTML() {
 
 function detailHTML() {
   const slot = sel && InventorySystem.slots(sel.area)[sel.index];
-  if (!slot) return '';
+  if (!slot) return '<div class="detail empty">아이템을 클릭하면 정보가 나와요. 핫바로 옮기거나 가방에 넣을 수 있어요.</div>';
   const it = getItem(slot.id);
   let info = '';
   let actions = '';
   if (it.type === 'seed') {
     const c = CROPS[it.cropId];
-    info = `${stars(c.grade)} · 성장 ${c.days}일 · 판매가 ${c.sellPrice}원 · 심기 체력 <b>${StaminaSystem.plantCost(it.cropId)}</b>`;
+    const days = it.seedling ? `<b>${seedlingDays(it.cropId)}일</b> (모종 · 씨앗 ${c.days}일의 1/3)` : `${c.days}일`;
+    info = `${stars(c.grade)} · 성장 ${days} · 판매가 ${c.sellPrice}원 · 심기 체력 <b>${StaminaSystem.plantCost(it.cropId)}</b>`;
+  } else if (it.type === 'rod') {
+    const r = ROD_BY_ID[it.id];
+    info = `${it.tier + 1}단계 낚싯대 · 입질 대기 ×${r.wait} · 챔질 여유 ${r.window}초<br><small>핫바에서 고르고 시냇물을 누르면 낚시해요</small>`;
+  } else if (it.type === 'pick') {
+    const p = PICK_BY_ID[it.id];
+    info = `${it.tier + 1}단계 곡괭이 · 캐는 시간 ${p.time}초 · 광석 더 나올 확률 ${Math.round(p.extra * 100)}%<br><small>핫바에서 고르고 광산의 광맥을 누르면 캐요</small>`;
+  } else if (it.type === 'material') {
+    info = it.desc;
+  } else if (it.type === 'ore') {
+    info = `한 반장에게 개당 ${it.price}원에 팔 수 있어요`;
   } else if (it.type === 'crop') {
     info = `판매가 ${it.price}원 · 창고에서 다시 보관할 수 있어요`;
   } else if (it.type === 'food') {
@@ -172,7 +190,19 @@ function detailHTML() {
     actions = '<button class="btn primary" data-act="eat">먹기</button>';
   } else if (it.type === 'special') {
     info = it.desc;
+  } else if (it.type === 'fish') {
+    const f = FISH[it.id];
+    const w = slot.w ?? f.w[0];
+    const r = catchReward({ id: it.id, w });
+    info = `${stars(f.grade)} ${f.crab ? '게' : '물고기'} · 무게 <b>${weightText(w)}</b> (이 종류 ${weightText(f.w[0])}~${weightText(f.w[1])})<br><small>오 씨에게 넘기면 ${r.item === 'mat_chitosan' ? '🐚 키토산' : '💊 타우린'} ${r.n}개</small>`;
+  } else if (it.type === 'facility') {
+    info = `${it.desc}<br><small>원하는 빈 땅에 직접 놓아요 (R 회전 · Esc 취소)</small>`;
+    actions = '<button class="btn primary" data-act="place">📐 배치하기</button>';
   }
+  // 핫바 ↔ 가방 옮기기
+  actions += sel.area === 'hotbar'
+    ? `<button class="btn" data-act="toBag">🎒 가방 '${AREA_NAMES[bagAreaOf(slot.id)]}' 칸에 넣기</button>`
+    : '<button class="btn" data-act="toHotbar">⬇ 핫바로 옮기기</button>';
   const held = G.ui.held;
   const isHeld = held && held.area === sel.area && held.index === sel.index;
   return `<div class="detail">
@@ -181,6 +211,14 @@ function detailHTML() {
     <div class="d-actions">${actions}</div>
   </div>`;
 }
+
+/** 탭마다 아래쪽 안내 문구 */
+const TAB_TIPS = {
+  mining: '곡괭이를 핫바로 옮겨 광맥을 캐요 · 광석은 광산의 한 반장에게 팔아요',
+  fishing: '낚싯대를 핫바로 옮겨 시냇물에서 낚시해요 · 물고기·게는 오 씨에게 타우린·키토산으로 바꿔요',
+  facility: "시설을 눌러 '배치하기' — 마을 빈 땅에 놓아요 · 새 시설은 상점 '시설·흙' 탭에서",
+  misc: '타우린·키토산·흙 같은 재료와 특별 아이템이 들어가요',
+};
 
 function gridHTML() {
   if (tab === 'equip') return equipGridHTML();
@@ -198,7 +236,8 @@ function footerHTML() {
     return `<div class="bag-foot"><span>보유 장비 <b>${ownedEquipment().length}</b>개</span><small>현재 직책: ${RANKS[G.state.rank].name} · 새 장비는 상점, 강화는 대장간에서</small></div>`;
   }
   const list = G.state.bag[tab];
-  return `<div class="bag-foot"><span><b>${list.filter(Boolean).length}</b> / ${list.length}</span></div>`;
+  const tip = TAB_TIPS[tab] ? `<small>${TAB_TIPS[tab]}</small>` : '';
+  return `<div class="bag-foot"><span><b>${list.filter(Boolean).length}</b> / ${list.length}</span>${tip}</div>`;
 }
 
 function hotbarHTML() {
@@ -233,6 +272,24 @@ function onSlotClick(area, index) {
   sel = { area, index };
   if (InventorySystem.slots(area)[index]) InventorySystem.select(area, index);
   refreshModal('inventory');
+}
+
+/** 고른 칸을 핫바 빈칸으로, 또는 핫바에서 제 가방 탭 빈칸으로 옮긴다 */
+function onMove(act) {
+  const slot = InventorySystem.slots(sel.area)[sel.index];
+  if (!slot) return;
+  const to = act === 'toHotbar' ? 'hotbar' : bagAreaOf(slot.id);
+  const j = InventorySystem.slots(to).indexOf(null);
+  if (j < 0) {
+    AudioManager.sfx('error');
+    toast(act === 'toHotbar' ? '핫바에 빈칸이 없어요' : `가방 '${AREA_NAMES[to]}' 칸이 가득 찼어요`, 'warn');
+    return;
+  }
+  AudioManager.sfx('click');
+  InventorySystem.swap(sel.area, sel.index, to, j);
+  sel = { area: to, index: j };
+  if (to !== 'hotbar') tab = to;
+  InventorySystem.select(to, j);
 }
 
 function onEquipClick(kind, id) {
@@ -295,8 +352,14 @@ function render(body) {
   });
   body.querySelectorAll('.detail [data-act]').forEach((el) => {
     el.addEventListener('click', () => {
-      if (el.dataset.act === 'eat') StaminaSystem.eat(sel.area, sel.index);
-      else onEquipAction(el.dataset.act);
+      const act = el.dataset.act;
+      if (act === 'eat') StaminaSystem.eat(sel.area, sel.index);
+      else if (act === 'toBag' || act === 'toHotbar') onMove(act);
+      else if (act === 'place') {
+        const it = getItem(InventorySystem.slots(sel.area)[sel.index].id);
+        closeModal();
+        FacilitySystem.startPlacement(it.kind);
+      } else onEquipAction(act);
     });
   });
 }
@@ -309,6 +372,6 @@ export const InventoryUI = {
     openModal('inventory', '🎒 가방', render, { wide: true });
   },
   init() {
-    for (const evt of ['inventory', 'outfit', 'held', 'gear', 'rank']) EventBus.on(evt, () => refreshModal('inventory'));
+    for (const evt of ['inventory', 'outfit', 'held', 'gear', 'rank', 'fish']) EventBus.on(evt, () => refreshModal('inventory'));
   },
 };

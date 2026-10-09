@@ -66,10 +66,18 @@ export function initWeather(scene) {
   scene.add(snow);
 }
 
+let indoor = false;
+
+/** 광산 안에서는 비·눈이 내리지 않는다 */
+export function setWeatherIndoor(on) {
+  indoor = on;
+  setWeather(current);
+}
+
 export function setWeather(w, instant = false) {
   current = w;
-  rain.visible = w === 'rain';
-  snow.visible = w === 'snow';
+  rain.visible = w === 'rain' && !indoor;
+  snow.visible = w === 'snow' && !indoor;
   if (instant) {
     snowLevel = w === 'snow' ? 0.55 : 0;
     setSnowLevel(snowLevel);

@@ -2,8 +2,11 @@ import { G } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { NPCS } from '../data/npcs.js';
 import { getItem } from '../data/items.js';
+import { HALL_COST } from '../data/mainQuests.js';
 import { RelationSystem } from './RelationSystem.js';
 import { QuestSystem } from './QuestSystem.js';
+import { InventorySystem } from './InventorySystem.js';
+import { MiningSystem } from './MiningSystem.js';
 import { DialogueUI } from '../ui/DialogueUI.js';
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -55,7 +58,11 @@ export const DialogueSystem = {
       while (loop) {
         // 줄 수 있는 부탁이 있으면 이야기하자마자 들려주고 자동으로 수락 (완료 보고 뒤 새로 생긴 부탁도 포함)
         for (const q of QuestSystem.offersFor(npcId)) await this.doOffer(npcId, q);
+        if (npcId === 'han' && G.state.flags.mine && !G.state.flags.gotPickaxe) await this.givePickaxe();
         const opts = [];
+        if (npcId === 'chief' && QuestSystem.canFundHall()) {
+          opts.push({ label: `🏛️ 마을회관 건축비 내기 (${HALL_COST.toLocaleString()}원)`, highlight: true, run: () => this.doFundHall() });
+        }
         for (const d of QuestSystem.deliverablesFor(npcId)) {
           opts.push({ label: `🎁 ${getItem(d.o.item).name} ${d.o.n}개 전달하기`, highlight: true, run: () => this.doDeliver(npcId, d) });
         }
@@ -64,6 +71,9 @@ export const DialogueSystem = {
         }
         if (npcId === 'shop') opts.push({ label: '🛒 거래하기', run: () => { openAfter = 'shop'; return false; } });
         if (npcId === 'smith') opts.push({ label: '🔨 대장간 이용하기', run: () => { openAfter = 'forge'; return false; } });
+        if (npcId === 'fisher' && this.fishingOpen()) opts.push({ label: '🎣 물고기 교환 · 낚싯대', run: () => { openAfter = 'fish'; return false; } });
+        if (npcId === 'han') opts.push({ label: '⛏️ 광석 팔기', run: () => { openAfter = 'ore'; return false; } });
+        if (npcId === 'dolsoe') opts.push({ label: '🛒 곡괭이 사기', run: () => { openAfter = 'pick'; return false; } });
         opts.push({ label: '💬 이야기하기', run: () => this.chat(npcId) });
         opts.push({ label: '👋 작별 인사', run: () => false });
         const choice = await DialogueUI.choose(speaker(npcId), null, opts);
@@ -79,6 +89,35 @@ export const DialogueSystem = {
       npcEnt.talking = false;
     }
     if (openAfter) this.openTrade?.(openAfter);
+  },
+
+  /** 오 씨 낚시 가게: 낚싯대 퀘스트를 끝냈거나 낚싯대·잡은 고기가 있으면 */
+  fishingOpen() {
+    const s = G.state;
+    return s.quests.subs.sub_fisher_rod?.status === 'done' || InventorySystem.hasType('rod') || InventorySystem.hasType('fish');
+  },
+
+  async givePickaxe() {
+    await DialogueUI.say(speaker('han'), [
+      '오, 자네가 우리 집사람이 말한 그 부지런한 이웃이구먼!',
+      '광산에 왔으면 곡괭이부터 있어야지. 이건 내가 쓰던 거라 좀 낡았지만 아직 쓸 만하다네.',
+    ]);
+    if (MiningSystem.givePickaxe()) {
+      await DialogueUI.say(speaker('han'), [
+        '핫바에서 곡괭이를 고르고 반짝이는 광맥을 누르면 캘 수 있네. 한 번 캘 때마다 힘이 조금 드니 무리하지 말고.',
+        '캔 광석은 나한테 가져오면 값을 쳐주지. 더 좋은 곡괭이는 저기 돌쇠가 판다네.',
+      ]);
+    }
+  },
+
+  async doFundHall() {
+    if (QuestSystem.fundHall()) {
+      await DialogueUI.say(speaker('chief'), [
+        '허허, 정말 고맙네! 당장 일꾼들을 불러 공사를 시작하겠네.',
+        '하룻밤 푹 자고 일어나면 번듯한 새 회관이 서 있을 걸세. 감자 새참도 잊지 말고!',
+      ]);
+    }
+    return true;
   },
 
   async chat(npcId) {
@@ -130,7 +169,9 @@ export const DialogueSystem = {
         '사실… 나도 이제 나이가 들어서 마을 일을 맡아 줄 사람을 찾고 있었다네.',
         '내가 부탁하는 일들을 하나씩 해 주겠나? 다 해내면 자네에게 이 마을을 맡기고 싶네.',
       ]);
-      QuestSystem.accept(QuestSystem.currentMain());
+      // 메인 퀘스트를 이미 다 끝낸 세이브(치트 등)면 받을 퀘스트가 없다
+      const first = QuestSystem.currentMain();
+      if (first && !G.state.quests.main) QuestSystem.accept(first);
       await DialogueUI.say(speaker('chief'), [
         '첫 부탁은 간단하네. 마을 사람들에게 인사부터 하고 오게.',
         '궁금한 건 언제든 마을회관으로 찾아오게나. 허허.',

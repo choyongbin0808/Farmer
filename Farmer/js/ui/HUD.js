@@ -24,9 +24,10 @@ function setText(id, v) {
 export function itemIconHTML(id) {
   const it = getItem(id);
   if (!it) return '';
-  if (it.type === 'seed') return `<span class="ico">🌱<span class="sub-ico">${it.subIcon}</span></span>`;
+  if (it.type === 'seed') return `<span class="ico">${it.icon}<span class="sub-ico">${it.subIcon}</span></span>`;
   // 도구는 장착한 장비 아이콘 (트랙터 🚜 등)
   if (it.type === 'tool' && G.state) return `<span class="ico">${GearSystem.equipped(it.toolKind).icon}</span>`;
+  if (it.subIcon) return `<span class="ico">${it.icon}<span class="sub-ico">${it.subIcon}</span></span>`;
   return `<span class="ico">${it.icon}</span>`;
 }
 
@@ -38,6 +39,12 @@ export function slotHTML(slot) {
     const id = GearSystem.equippedId(it.toolKind);
     const c = '#' + GearSystem.statsOf(id).color.toString(16).padStart(6, '0');
     badge = `<span class="lv" style="background:${c}">+${GearSystem.enhanceOf(id)}</span>`;
+  } else if (it.type === 'rod' || it.type === 'pick') {
+    badge = `<span class="lv" style="background:#${it.color.toString(16).padStart(6, '0')}">${it.tier + 1}</span>`;
+  } else if (it.type === 'fish') {
+    // 물고기: 등급 별 + 무게
+    const w = slot.w ?? 0;
+    badge = `<span class="fish-grade">${'★'.repeat(it.grade)}</span><span class="wt">${w < 1 ? `${Math.round(w * 1000)}g` : `${w.toFixed(1)}kg`}</span>`;
   }
   const count = slot.n > 1 ? `<span class="cnt">${slot.n}</span>` : '';
   return itemIconHTML(slot.id) + badge + count;
@@ -55,6 +62,7 @@ export function initHUD(handlers) {
     bar.appendChild(s);
   }
   $('btn-quest').addEventListener('click', handlers.openQuests);
+  $('btn-book').addEventListener('click', handlers.openBook);
   $('btn-bag').addEventListener('click', handlers.openInventory);
   $('btn-menu').addEventListener('click', handlers.openMenu);
   $('quest-tracker').addEventListener('click', handlers.openQuests);
@@ -187,6 +195,15 @@ export function fade(toBlack) {
     if (!toBlack) G.ui.fading = false;
     r();
   }, 800));
+}
+
+/** 화면 아래쪽 안내 문구 (배치 모드·낚시 중) — null 이면 숨김 */
+export function setHint(html) {
+  const el = $('play-hint');
+  if (cache.hint === html) return;
+  cache.hint = html;
+  el.innerHTML = html || '';
+  el.classList.toggle('hidden', !html);
 }
 
 export function showHUD(show) {

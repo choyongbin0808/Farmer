@@ -19,6 +19,8 @@ export class NPC {
     this.wanderWait = 2 + Math.random() * 3;
     this.talking = false;
     this.frozen = false;
+    this.action = null; // 엔딩 연출: 'clap' 박수 | 'cheer' 두 팔 번쩍 | 'wave' 손 흔들기
+    this.armBaseZ = this.parts.arms.map((a) => a.rotation.z);
     this.phase = Math.random() * 10;
     this.resetHome();
   }
@@ -80,5 +82,31 @@ export class NPC {
     this.parts.arms[1].rotation.x = s * 0.5;
     const idle = Math.sin(t * 2 + this.phase) * 0.02;
     this.body.position.y = Math.abs(Math.sin(this.walkT)) * 0.07 * this.moving + idle;
+    this.animateAction(t);
+  }
+
+  /** 박수 · 환호 · 손 흔들기 (팔 피벗 z+ 는 +x 쪽으로 벌어짐: arms[0] 은 +, arms[1] 은 - 가 안쪽) */
+  animateAction(t) {
+    const [a0, a1] = this.parts.arms;
+    const [b0, b1] = this.armBaseZ;
+    if (this.action === 'clap') {
+      const k = 0.42 + 0.3 * Math.abs(Math.sin(t * 13 + this.phase));
+      a0.rotation.x = a1.rotation.x = -1.25;
+      a0.rotation.z = b0 + k;
+      a1.rotation.z = b1 - k;
+    } else if (this.action === 'cheer') {
+      const k = Math.sin(t * 9 + this.phase) * 0.25;
+      a0.rotation.x = a1.rotation.x = -2.8 + k;
+      a0.rotation.z = b0 - 0.2;
+      a1.rotation.z = b1 + 0.2;
+      this.body.position.y = Math.abs(Math.sin(t * 9 + this.phase)) * 0.12;
+    } else if (this.action === 'wave') {
+      a1.rotation.x = -2.7;
+      a1.rotation.z = b1 + 0.15 + Math.sin(t * 10) * 0.35;
+      a0.rotation.z = b0;
+    } else {
+      a0.rotation.z = b0;
+      a1.rotation.z = b1;
+    }
   }
 }
