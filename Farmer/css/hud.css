@@ -303,6 +303,92 @@
   box-shadow: 0 0 0 3px rgba(226, 68, 58, 0.18);
 }
 @keyframes bob { 0%, 100% { margin-bottom: 3px; } 50% { margin-bottom: 8px; } }
+/* ───── 낚시: 파워 게이지 · 미니게임 (스타듀밸리식 세로 막대) ───── */
+#fish-ui {
+  position: fixed;
+  right: 22%;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  pointer-events: none; /* 누르기는 화면(캔버스)이 받는다 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+#fish-ui .hidden { display: none !important; }
+.fu-power {
+  position: relative;
+  width: 34px;
+  height: 220px;
+  border-radius: 14px;
+  background: rgba(40, 30, 20, 0.6);
+  border: 3px solid #fff8e6;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.fu-power-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; border-radius: 9px; }
+.fu-perfect {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-title);
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 0 4px #e6a93a;
+  opacity: 0;
+}
+.fu-perfect.show { opacity: 1; }
+.fu-game {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 18px;
+  background: #d8b688;
+  border: 4px solid #6a4a30;
+  box-shadow: var(--shadow), inset 0 0 0 3px #f0d6aa;
+}
+.fu-track {
+  position: relative;
+  width: 46px;
+  height: 300px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 3px solid #6a4a30;
+}
+.fu-water { position: absolute; inset: 0; background: linear-gradient(#7fd0ee, #2e7aa8); }
+.fu-bar {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 0;
+  border-radius: 8px;
+  background: rgba(124, 220, 90, 0.55);
+  border: 3px solid #4f9a36;
+  transition: background 0.1s;
+}
+.fu-bar.on { background: rgba(160, 255, 110, 0.85); border-color: #2f7a1a; }
+.fu-fish {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%) scaleX(-1);
+  font-size: 26px;
+  line-height: 28px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+}
+.fu-prog {
+  position: relative;
+  width: 14px;
+  height: 300px;
+  border-radius: 7px;
+  background: rgba(40, 30, 20, 0.45);
+  border: 2px solid #6a4a30;
+  overflow: hidden;
+}
+.fu-prog i { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; border-radius: 5px; }
+
 /* 상황 말풍선: 낚시 입질 ❗ · 시설 진행 */
 .dyn-tag {
   font-family: var(--font-title);

@@ -265,6 +265,74 @@ export function makeMineExit() {
   return g;
 }
 
+/** 아래층으로 내려가는 구멍 + 사다리 머리 */
+export function makeLadderDown(label) {
+  const g = new THREE.Group();
+  const pit = mesh(new THREE.CircleGeometry(1.25, 28), new THREE.MeshBasicMaterial({ color: 0x0c0907 }), false);
+  pit.rotation.x = -Math.PI / 2;
+  pit.position.y = 0.03;
+  g.add(pit);
+  const rimM = mat(0x5a4c40, { roughness: 0.95 });
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2;
+    const r = makeRock(0.38 + Math.random() * 0.18);
+    r.material = rimM;
+    r.position.set(Math.cos(a) * 1.4, r.position.y, Math.sin(a) * 1.4);
+    g.add(r);
+  }
+  const wood = surf('wood', 0x8a6444);
+  for (const sx of [-0.32, 0.32]) {
+    const rail = mesh(box(0.08, 1.2, 0.08), wood);
+    rail.position.set(sx, 0.35, -0.2);
+    rail.rotation.x = 0.25;
+    g.add(rail);
+  }
+  for (let i = 0; i < 3; i++) {
+    const rung = mesh(box(0.64, 0.06, 0.06), wood);
+    rung.position.set(0, 0.05 + i * 0.32, -0.12 - i * 0.08);
+    g.add(rung);
+  }
+  // 나무 틀 + 등불
+  for (const sx of [-1, 1]) {
+    const post = mesh(box(0.16, 2.2, 0.16), wood);
+    post.position.set(sx * 1.55, 1.1, -1.1);
+    g.add(post);
+  }
+  const beam = mesh(box(3.4, 0.18, 0.18), wood);
+  beam.position.set(0, 2.2, -1.1);
+  const lamp = mesh(new THREE.SphereGeometry(0.13, 12, 10), GLOW_MAT, false);
+  lamp.position.set(0, 1.92, -1.1);
+  g.add(beam, lamp);
+  const sign = makeLabel(label, { scale: 0.8 });
+  sign.position.set(0, 3.0, -1.1);
+  g.add(sign);
+  return g;
+}
+
+/** 위층으로 올라가는 사다리 (벽에 기대어 위로) + 위에서 내려오는 빛 */
+export function makeLadderUp(label) {
+  const g = new THREE.Group();
+  const wood = surf('wood', 0x8a6444);
+  for (const sx of [-0.4, 0.4]) {
+    const rail = mesh(box(0.09, 4.6, 0.09), wood);
+    rail.position.set(sx, 2.2, -0.35);
+    rail.rotation.x = -0.18;
+    g.add(rail);
+  }
+  for (let i = 0; i < 9; i++) {
+    const rung = mesh(box(0.8, 0.06, 0.06), wood);
+    rung.position.set(0, 0.3 + i * 0.48, -0.35 - i * 0.085);
+    g.add(rung);
+  }
+  const shaft = mesh(new THREE.CylinderGeometry(0.9, 1.3, 4.5, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff0c8, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }), false);
+  shaft.position.set(0, 2.25, -0.6);
+  g.add(shaft);
+  const sign = makeLabel(label, { scale: 0.8 });
+  sign.position.set(0, 5.2, -0.4);
+  g.add(sign);
+  return g;
+}
+
 /** 돌쇠의 곡괭이 좌판 */
 export function makePickStall() {
   const g = new THREE.Group();
@@ -293,16 +361,17 @@ export function makePickStall() {
   return g;
 }
 
-/** 광산 바닥 + 바위벽 (로컬 좌표, 바닥 크기 w x d, exitZ: 서쪽 벽 출구 자리) */
-export function makeCaveShell(w, d, exitZ = 0) {
+/** 광산 바닥 + 바위벽 (로컬 좌표, 바닥 크기 w x d, exitZ: 서쪽 벽 출구 자리 · null 이면 출구 없음, tint: 바닥 색) */
+export function makeCaveShell(w, d, exitZ = null, tint = 0x8a7462) {
   const g = new THREE.Group();
   const floorTex = TX.dirtPathTex();
-  const floor = tiledPlane(90, 90, 3, new THREE.MeshStandardMaterial({ map: floorTex.map, normalMap: floorTex.normalMap, color: 0x8a7462, roughness: 0.95 }));
+  const floor = tiledPlane(110, 110, 3, new THREE.MeshStandardMaterial({ map: floorTex.map, normalMap: floorTex.normalMap, color: tint, roughness: 0.95 }));
   floor.position.y = 0.0;
   g.add(floor);
   // 바깥 어둠: 방 밖은 낮은 바위 지붕처럼 덮는다
-  const wallM = surf('stone', 0x6a5e54);
-  const rockC = 0x7a6e64;
+  const tc = new THREE.Color(tint);
+  const wallM = surf('stone', tc.clone().multiplyScalar(0.78).getHex());
+  const rockC = tc.clone().multiplyScalar(0.9).getHex();
   const hw = w / 2, hd = d / 2;
   // 카메라는 남쪽(+z)에서 내려다보므로 남쪽 벽은 낮게
   const walls = [
@@ -320,7 +389,7 @@ export function makeCaveShell(w, d, exitZ = 0) {
   const rocks = [];
   for (let x = -hw; x <= hw; x += 2.2) rocks.push([x, -hd - 0.2, 1.6 + Math.random()]);
   for (let z = -hd; z <= hd; z += 2.4) {
-    if (z < exitZ - 2.2 || z > exitZ + 2.2) rocks.push([-hw - 0.2, z, 1.3 + Math.random() * 0.8]);
+    if (exitZ === null || z < exitZ - 2.2 || z > exitZ + 2.2) rocks.push([-hw - 0.2, z, 1.3 + Math.random() * 0.8]);
     rocks.push([hw + 0.2, z, 1.3 + Math.random() * 0.8]);
   }
   for (let x = -hw; x <= hw; x += 2.6) rocks.push([x, hd + 0.5, 0.5 + Math.random() * 0.3]);

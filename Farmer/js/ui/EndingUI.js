@@ -201,12 +201,12 @@ export async function playEnding(onFinish) {
     //    두 사람을 잇는 선에서 비켜난 옆쪽에서 비춘다
     cam.setShot({ x: 5.2, y: 2.4, z: PLAYER_AT.z + 0.6 }, { x: 0, y: 1.5, z: CENTER.z }, { speed: 1.2 });
     await g(wait(1600));
-    cam.setShot({ x: 2.5, y: 2.0, z: CHIEF_AT.z + 1.5 }, { x: CHIEF_AT.x, y: 1.45, z: CHIEF_AT.z }, { speed: 2.4 });
+    cam.setShot({ x: 1.4, y: 1.95, z: CHIEF_AT.z + 2.0 }, { x: CHIEF_AT.x, y: 1.45, z: CHIEF_AT.z }, { speed: 2.4 });
     await g(DialogueUI.say(speaker('chief'), [
       '모두 모였구먼. 오늘은 우리 초록마을에 아주 특별한 날이라네.',
       `도시에 지쳐 이곳에 왔던 ${name} 씨가, 이제는 누구보다 이 마을을 아끼는 사람이 되었지.`,
     ]));
-    cam.setShot({ x: -2.5, y: 2.0, z: PLAYER_AT.z - 1.4 }, { x: PLAYER_AT.x, y: 1.5, z: PLAYER_AT.z }, { speed: 2.4 });
+    cam.setShot({ x: -1.3, y: 1.95, z: PLAYER_AT.z - 2.0 }, { x: PLAYER_AT.x, y: 1.5, z: PLAYER_AT.z }, { speed: 2.4 });
     await g(DialogueUI.say(speaker('chief'), [
       '밭을 일구고, 이웃을 돕고, 새 마을회관까지 지어 주었네.',
       '그러니 이제 이 마을을… 자네에게 맡기겠네.',
@@ -237,7 +237,7 @@ export async function playEnding(onFinish) {
       await g(DialogueUI.say(speaker(id), [LINES[id]]));
       n.action = 'clap';
     }
-    cam.setShot({ x: 2.5, y: 2.0, z: PLAYER_AT.z - 1.4 }, { x: PLAYER_AT.x, y: 1.5, z: PLAYER_AT.z }, { speed: 2.4 });
+    cam.setShot({ x: 1.3, y: 1.95, z: PLAYER_AT.z - 2.0 }, { x: PLAYER_AT.x, y: 1.5, z: PLAYER_AT.z }, { speed: 2.4 });
     player.stance = WAVE;
     await g(DialogueUI.say({ name, avatar: '🧑‍🌾' }, ['모두 정말 고마워요. 앞으로도 이 마을에서 함께 행복하게 지내요!']));
     DialogueUI.hide();

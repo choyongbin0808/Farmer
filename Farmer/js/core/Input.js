@@ -1,6 +1,6 @@
 export const Input = {
   keys: new Set(),
-  mouse: { x: 0, y: 0, inside: false },
+  mouse: { x: 0, y: 0, inside: false, down: false },
   handlers: {},
 
   init(canvas, handlers) {
@@ -16,7 +16,9 @@ export const Input = {
       handlers.onKey?.(e.code, e);
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => { this.keys.clear(); this.mouse.down = false; });
+    // 왼쪽 버튼을 누르고 있는지 (낚시 미니게임) — 캔버스 밖에서 떼도 풀리도록 창 전체에서 받는다
+    window.addEventListener('pointerup', (e) => { if (e.button === 0) this.mouse.down = false; });
 
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('pointerdown', (e) => {
@@ -26,6 +28,7 @@ export const Input = {
         canvas.setPointerCapture(e.pointerId);
       } else if (e.button === 0) {
         downPos = { x: e.clientX, y: e.clientY };
+        this.mouse.down = true;
       }
     });
     canvas.addEventListener('pointermove', (e) => {

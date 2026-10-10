@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G, FARM_MAX, HOTBAR_SIZE, createNewState, isUIBlocking, currentZone } from './core/Game.js';
+import { G, FARM_MAX, HOTBAR_SIZE, createNewState, isUIBlocking, currentZone, currentMineFloor } from './core/Game.js';
 import { EventBus } from './core/EventBus.js';
 import { Input } from './core/Input.js';
 import { AudioManager } from './core/AudioManager.js';
@@ -7,7 +7,7 @@ import { saveGame, loadGame, hasSave, deleteSave, loadSettings } from './core/Sa
 import { SM } from './world/SceneManager.js';
 import { CameraController } from './world/CameraController.js';
 import { buildWorld, updateWorld, updateDecorations, interactables, BUILDINGS, plotPosition, STREAM_Z, FARM_SIGN_POS } from './world/World.js';
-import { buildMine, applyZone, MINE_EXIT, nodeWorldPos, mineNodes } from './world/Mine.js';
+import { buildMine, applyZone, MINE_EXIT, oreWorldPos, ladderPos } from './world/Mine.js';
 import { updateDayNight, periodOf } from './world/DayNight.js';
 import { initWeather, setWeather, updateWeather } from './world/Weather.js';
 import { initEffects, updateEffects } from './world/Effects.js';
@@ -209,7 +209,8 @@ async function begin(state, isNew) {
   // 광산에서 저장했으면 광산 안에서 이어 한다
   const zone = state.player.zone === 'mine' && state.flags.mine ? 'mine' : 'village';
   state.player.zone = zone;
-  applyZone(zone);
+  if (zone !== 'mine') state.player.mineFloor = 0;
+  applyZone(zone, state.player.mineFloor ?? 0);
   MiningSystem.refreshVisuals();
   cam.setFollow();
   cam.yaw = 0;
@@ -327,8 +328,9 @@ function onClick(x, y) {
   else if (hit.type === 'farmSign') interactFarmSign();
   else if (hit.type === 'water') interactWater(hit.point);
   else if (hit.type === 'facility') interactFacility(hit.index);
-  else if (hit.type === 'ore') interactOre(hit.index);
+  else if (hit.type === 'ore') interactOre(hit.floor, hit.oreId);
   else if (hit.type === 'mineExit') interactMineExit();
+  else if (hit.type === 'mineLadder') interactLadder(hit.dir);
 }
 
 function interactWater(point) {
@@ -349,13 +351,22 @@ function interactFacility(i) {
   approach(f.x, f.z, FacilitySystem.reach(i), () => FacilityUI.open(i));
 }
 
-function interactOre(i) {
-  const p = nodeWorldPos(i);
-  approach(p.x, p.z, 1.6, () => MiningSystem.mine(i));
+function interactOre(f, id) {
+  const e = MiningSystem.oreById(f, id);
+  if (!e) return;
+  const p = oreWorldPos(f, e);
+  approach(p.x, p.z, 1.6, () => MiningSystem.mine(f, id));
 }
 
 function interactMineExit() {
   approach(MINE_EXIT.x + 1.4, MINE_EXIT.z, 1.2, () => MiningSystem.exit());
+}
+
+/** 광산 사다리: 위·아래층으로 */
+function interactLadder(dir) {
+  const p = ladderPos(currentMineFloor(), dir);
+  if (!p) return;
+  approach(p.x, p.z, dir === 'down' ? 2.4 : 1.6, () => MiningSystem.changeFloor(dir));
 }
 
 function interactFarmSign() {
@@ -410,17 +421,22 @@ function interactNearest() {
     if (d < bestD) { bestD = d; best = fn; }
   };
   const zone = currentZone();
+  const floor = currentMineFloor();
   for (const id of NPC_ORDER) {
     if ((NPCS[id].zone ?? 'village') !== zone) continue;
     const n = G.refs.npcs[id];
     near(n.pos.x, n.pos.z, () => interactNpc(id));
   }
   if (zone === 'mine') {
-    mineNodes.forEach((_, i) => {
-      const p = nodeWorldPos(i);
-      near(p.x, p.z, () => interactOre(i), 0.6);
-    });
-    near(MINE_EXIT.x, MINE_EXIT.z, interactMineExit, 0.6);
+    for (const e of MiningSystem.floorState(floor).ores) {
+      const p = oreWorldPos(floor, e);
+      near(p.x, p.z, () => interactOre(floor, e.id), 0.6);
+    }
+    if (floor === 0) near(MINE_EXIT.x, MINE_EXIT.z, interactMineExit, 0.6);
+    for (const dir of ['up', 'down']) {
+      const p = ladderPos(floor, dir);
+      if (p) near(p.x, p.z, () => interactLadder(dir), 1);
+    }
   } else {
     for (const [id, b] of Object.entries(BUILDINGS)) {
       if (BUILDING_NPC[id]) continue;

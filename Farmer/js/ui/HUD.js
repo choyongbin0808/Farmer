@@ -138,8 +138,14 @@ export function updateHUD() {
 
   setText('hud-day', `${s.time.day}일차`);
   setText('hud-clock', TimeSystem.clock());
-  const w = WEATHERS[s.time.weather];
-  setText('hud-weather', `${w.icon} ${w.name}`);
+  // 광산 안에서는 날씨 대신 지금 층
+  if (s.player.zone === 'mine') {
+    const f = s.player.mineFloor ?? 0;
+    setText('hud-weather', `⛏️ 광산 ${f + 1}층${f === 0 ? ' (입구)' : ''}`);
+  } else {
+    const w = WEATHERS[s.time.weather];
+    setText('hud-weather', `${w.icon} ${w.name}`);
+  }
 }
 
 function floatStamina(n) {

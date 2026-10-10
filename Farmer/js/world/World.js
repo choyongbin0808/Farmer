@@ -42,6 +42,8 @@ export const MINE_DOOR = { x: 27.2, z: 13 };
 
 // 배치한 시설의 충돌체 (FacilitySystem 이 다시 만든다)
 export const facilityColliders = [];
+// 광산 광맥의 충돌체 (광맥이 생기고 없어질 때마다 Mine.js 가 다시 만든다)
+export const mineColliders = [];
 
 // 지금 구역의 이동 범위 (마을 / 광산)
 const VILLAGE_BOUNDS = { minX: -BOUNDS, maxX: BOUNDS, minZ: -BOUNDS, maxZ: BOUNDS };
@@ -737,7 +739,7 @@ export function placementBlocked(rect, { ignore = null, keepClear = [] } = {}) {
 export function resolveCollision(pos, radius = 0.4) {
   pos.x = THREE.MathUtils.clamp(pos.x, zoneBounds.minX, zoneBounds.maxX);
   pos.z = THREE.MathUtils.clamp(pos.z, zoneBounds.minZ, zoneBounds.maxZ);
-  for (const list of [colliders, fenceColliders, facilityColliders]) for (const c of list) {
+  for (const list of [colliders, fenceColliders, facilityColliders, mineColliders]) for (const c of list) {
     if ('r' in c) {
       const dx = pos.x - c.x, dz = pos.z - c.z;
       const d = Math.hypot(dx, dz);

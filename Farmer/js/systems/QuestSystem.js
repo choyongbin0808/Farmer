@@ -1,4 +1,4 @@
-import { G, RESIDENTS, currentZone } from '../core/Game.js';
+import { G, RESIDENTS, currentZone, currentMineFloor } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { saveGame } from '../core/SaveManager.js';
@@ -9,7 +9,7 @@ import { NPCS } from '../data/npcs.js';
 import { CLOTHES } from '../data/clothes.js';
 import { getItem, isHandTool } from '../data/items.js';
 import { StorageSystem } from './StorageSystem.js';
-import { MINE_EXIT } from '../world/Mine.js';
+import { MINE_EXIT, ladderPos } from '../world/Mine.js';
 import { TOOL_ORDER, TIERS } from '../data/tools.js';
 import { InventorySystem } from './InventorySystem.js';
 import { GearSystem } from './GearSystem.js';
@@ -327,11 +327,17 @@ export const QuestSystem = {
 
   // ─── 퀘스트 위치 ───
   /** 다른 구역(광산 ↔ 마을)에 있는 곳이면 그 구역으로 가는 출입구를 가리킨다 */
-  zoned(pos, zone, label) {
+  zoned(pos, zone, label, floor = 0) {
     const here = currentZone();
+    if (here === 'mine') {
+      const f = currentMineFloor();
+      if (zone === 'mine' && floor === f) return { ...pos, label };
+      // 광산 아래층에 있으면 먼저 위층 사다리로 (광산 사람들은 모두 1층 입구에 있다)
+      if (f > 0) return { ...ladderPos(f, 'up'), label: `위층 사다리 → ${label}` };
+      return { ...MINE_EXIT, label: `광산 출구 → ${label}` };
+    }
     if (zone === here) return { ...pos, label };
-    if (here === 'village') return { ...MINE_DOOR, label: `광산 입구 → ${label}` };
-    return { ...MINE_EXIT, label: `광산 출구 → ${label}` };
+    return { ...MINE_DOOR, label: `광산 입구 → ${label}` };
   },
 
   npcPos(id) {

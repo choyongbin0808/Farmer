@@ -33,7 +33,8 @@ function renderOre(body) {
     <div class="shop-top">👷 한 반장: "땀 흘려 캔 광석, 값은 제대로 쳐주지!" <span class="money">💰 ${formatMoney(G.state.player.money)}원</span></div>
     ${rows}
     <div class="note">⛏️ 광석 시세 (필요 곡괭이): <div class="ore-table">${table}</div>
-    광맥은 매일 아침 다시 차고, 캐낸 자리도 서너 시간이면 다시 생겨요. 캘 때마다 체력이 조금 들어요.</div>`;
+    광산은 <b>4층</b>까지 있어요. 층이 올라갈수록 좋은 광석이 잘 나오고, 3층부터는 석탄·구리가 나오지 않아요.<br>
+    광맥은 아무 데나 생기고, 시간이 지나면 조금씩 다시 생겨요. 캘 때마다 체력이 조금 들어요.</div>`;
   body.querySelectorAll('[data-sell]').forEach((b) => b.addEventListener('click', () => {
     const money = MiningSystem.sell(b.dataset.sell, Number(b.dataset.n));
     if (money) {

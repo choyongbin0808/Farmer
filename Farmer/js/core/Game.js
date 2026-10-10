@@ -49,7 +49,7 @@ export function createNewState(name) {
   return {
     version: SAVE_VERSION,
     player: {
-      name, x: -14, z: 18, money: 500, stamina: 100, lastPlantAt: -9999, zone: 'village',
+      name, x: -14, z: 18, money: 500, stamina: 100, lastPlantAt: -9999, zone: 'village', mineFloor: 0,
       outfit: { hat: null, top: null, bottom: null },
     },
     ownedClothes: [],
@@ -77,8 +77,8 @@ export function createNewState(name) {
     },
     // 낚시: 종류별 최고 무게 · 종류별 잡은 수(도감), 전체 잡은 수 (잡은 고기는 가방 '낚시' 칸에 { id, n: 1, w } 로 담긴다)
     fishing: { best: {}, counts: {}, caught: 0 },
-    // 광산: 광맥 자리마다 { ore, respawnAt } (null = 아직 만들지 않음), 광석별 캔 수(도감)
-    mine: { nodes: null, mined: {} },
+    // 광산: 층마다 광맥 자리 [{ ore, respawnAt }] (null = 아직 만들지 않음), 광석별 캔 수(도감)
+    mine: { floors: null, mined: {} },
     // 배치한 시설: { kind, x, z, rot, job: { out, n, doneAt } | null } (배치 전 시설은 가방 '시설' 칸의 아이템)
     facilities: [],
   };
@@ -95,6 +95,11 @@ export function isUIBlocking() {
 /** 지금 플레이어가 있는 곳: 'village' | 'mine' */
 export function currentZone() {
   return G.state?.player.zone ?? 'village';
+}
+
+/** 광산 안이면 지금 층 (0 = 1층 입구) */
+export function currentMineFloor() {
+  return currentZone() === 'mine' ? (G.state.player.mineFloor ?? 0) : 0;
 }
 
 export function formatMoney(n) {

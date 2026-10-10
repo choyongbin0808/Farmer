@@ -2,18 +2,27 @@ import { G, absMinutes } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { saveGame } from '../core/SaveManager.js';
-import { ORES, ORE_ORDER, PICKAXES, PICK_BY_ID, NODE_SPOTS, RESPAWN_MIN, rollOre, rollOreAmount } from '../data/mining.js';
+import { ORES, ORE_ORDER, PICKAXES, PICK_BY_ID, MINE_FLOORS, MAX_ORES, REGEN_MIN, randomOreSpot, rollOre, rollOreAmount } from '../data/mining.js';
 import { InventorySystem } from './InventorySystem.js';
 import { StaminaSystem } from './StaminaSystem.js';
 import { MINE_DOOR } from '../world/World.js';
-import { MINE_SPAWN, showOreNode, applyZone, nodeWorldPos } from '../world/Mine.js';
+import { MINE_SPAWN, syncFloorOres, applyZone, oreWorldPos, arrivalPos, toLocal } from '../world/Mine.js';
+
+/** 층에 들어섰을 때 안내 (층이 올라갈수록 좋은 광석 확률↑, 석탄·구리는 3층부터 없음) */
+const FLOOR_TIPS = [
+  ' — 석탄 · 구리가 흔해요',
+  ' — 철 · 은이 늘어나요',
+  ' — 석탄 · 구리는 더 없어요! 은 · 금이 자주 보여요',
+  ' — 가장 깊은 층! 금과 자수정이 잘 나와요',
+];
 import { burst } from '../world/Effects.js';
 import { addFloatText } from '../ui/WorldMarkers.js';
 import { toast, fade } from '../ui/HUD.js';
 
 /**
  * 광산: 광맥을 곡괭이로 캐서 광석을 얻고, 한 반장에게 판다.
- * - 광맥은 매일 아침 모두 다시 차고, 캐낸 자리는 게임 시간 약 3시간 뒤 다시 생긴다.
+ * - 광맥은 정해진 자리 없이 층 안 빈 땅에 랜덤으로 생기고, 캐면 아무것도 남지 않는다.
+ * - 게임 시간이 흐르면 층마다 조금씩 다시 생긴다 (밖에 있거나 자는 동안에도 흐른 시간만큼, 한 번에 가득 차지 않음).
  * - 단단한 광석은 곡괭이 등급이 모자라면 못 캔다. 좋은 곡괭이일수록 빠르고, 광석이 여러 개 나올 확률이 높다.
  * - 한 번 캘 때마다 체력이 조금 든다 (농사와 같은 체력을 나눠 쓰므로 농사보다 벌이가 많을 수 없다).
  */
@@ -22,21 +31,63 @@ export const MiningSystem = {
   lastSwing: -1,
   respawnTimer: 0,
 
-  nodes() {
+  /** 지금 있는 광산 층 (0 = 1층 입구) */
+  floor() {
+    return G.state.player.mineFloor ?? 0;
+  },
+
+  /**
+   * 층 상태 { ores: [{ id, x, z, ore }], last: 마지막 생성 시각(게임 분), seq }
+   * 처음이거나 예전 형식(정해진 자리)이면 광맥을 가득 채워 시작한다
+   */
+  floorState(f = this.floor()) {
     const m = G.state.mine;
-    if (!Array.isArray(m.nodes) || m.nodes.length !== NODE_SPOTS.length) {
-      m.nodes = NODE_SPOTS.map(() => ({ ore: rollOre(), respawnAt: 0 }));
+    if (!Array.isArray(m.floors) || m.floors.length !== MINE_FLOORS || !Array.isArray(m.floors[0]?.ores)) {
+      m.floors = Array.from({ length: MINE_FLOORS }, () => ({ ores: [], last: absMinutes(), seq: 0 }));
+      delete m.nodes;
+      for (let i = 0; i < MINE_FLOORS; i++) this.spawn(i, MAX_ORES);
     }
-    return m.nodes;
+    return m.floors[f];
   },
 
+  /** 광맥 n개를 빈자리에 새로 만든다 (플레이어 바로 옆은 피한다) */
+  spawn(f, n) {
+    const st = G.state.mine.floors[f];
+    const avoid = [];
+    if (G.state.player.zone === 'mine' && this.floor() === f && G.refs.player) avoid.push(toLocal(f, G.refs.player.pos));
+    let made = 0;
+    for (let k = 0; k < n && st.ores.length < MAX_ORES; k++) {
+      const spot = randomOreSpot(f, st.ores, avoid);
+      if (!spot) break;
+      st.ores.push({ id: ++st.seq, ...spot, ore: rollOre(f) });
+      made++;
+    }
+    return made;
+  },
+
+  /** 흐른 시간만큼 광맥이 조금씩 다시 생긴다 (REGEN_MIN 분마다 하나, 최대 MAX_ORES) */
+  regen(f, now = absMinutes()) {
+    const st = this.floorState(f);
+    const due = Math.floor((now - st.last) / REGEN_MIN);
+    if (due <= 0) return 0;
+    st.last += due * REGEN_MIN;
+    if (st.ores.length >= MAX_ORES) {
+      st.last = now;
+      return 0;
+    }
+    return this.spawn(f, due);
+  },
+
+  /** 흐른 시간만큼 다시 생기게 한 뒤 모든 층의 광맥을 화면에 맞춘다 (불러오기 · 드나들 때) */
   refreshVisuals() {
-    this.nodes().forEach((n, i) => showOreNode(i, n.ore));
+    for (let f = 0; f < MINE_FLOORS; f++) {
+      this.regen(f);
+      syncFloorOres(f, this.floorState(f).ores);
+    }
   },
 
-  /** 새 날: 광맥이 모두 다시 찬다 */
+  /** 새 날: 자는 동안 흐른 시간만큼 다시 생긴다 (한 번에 가득 차지 않는다) */
   newDay() {
-    G.state.mine.nodes = NODE_SPOTS.map(() => ({ ore: rollOre(), respawnAt: 0 }));
     this.refreshVisuals();
   },
 
@@ -57,12 +108,9 @@ export const MiningSystem = {
     if (this.respawnTimer > 0) return;
     this.respawnTimer = 1;
     const now = absMinutes();
-    this.nodes().forEach((n, i) => {
-      if (!n.ore && now >= n.respawnAt) {
-        n.ore = rollOre();
-        showOreNode(i, n.ore);
-      }
-    });
+    for (let f = 0; f < MINE_FLOORS; f++) {
+      if (this.regen(f, now)) syncFloorOres(f, this.floorState(f).ores);
+    }
   },
 
   // ─── 드나들기 ───
@@ -76,10 +124,10 @@ export const MiningSystem = {
     this.busy = true;
     AudioManager.sfx('door');
     await fade(true);
-    this.moveTo('mine', MINE_SPAWN, Math.PI / 2);
+    this.moveTo('mine', MINE_SPAWN, Math.PI / 2, 0);
     await fade(false);
     this.busy = false;
-    toast('⛏️ 광산에 들어왔어요. 광맥을 곡괭이로 캐 보세요!');
+    toast('⛏️ 광산 1층이에요. 광맥을 곡괭이로 캐 보세요! 동쪽 끝 사다리로 더 깊이 내려갈 수 있어요');
     if (!G.state.flags.gotPickaxe) setTimeout(() => toast('💡 한 반장에게 말을 걸면 곡괭이를 받을 수 있어요'), 1800);
   },
 
@@ -93,14 +141,31 @@ export const MiningSystem = {
     this.busy = false;
   },
 
-  /** 플레이어를 구역으로 옮긴다 (잠들 때·불러올 때도 사용) */
-  moveTo(zone, pos, facing) {
+  /** 사다리로 위·아래층 이동 */
+  async changeFloor(dir) {
+    if (this.busy) return;
+    const from = this.floor();
+    const to = dir === 'down' ? from + 1 : from - 1;
+    if (to < 0 || to >= MINE_FLOORS) return;
+    this.busy = true;
+    AudioManager.sfx('door');
+    await fade(true);
+    this.moveTo('mine', arrivalPos(to, dir === 'down' ? 'above' : 'below'), dir === 'down' ? Math.PI / 2 : -Math.PI / 2, to);
+    await fade(false);
+    this.busy = false;
+    toast(`⛏️ 광산 ${to + 1}층${to === 0 ? ' (입구)' : ''}${FLOOR_TIPS[to]}`);
+  },
+
+  /** 플레이어를 구역(과 광산 층)으로 옮긴다 (잠들 때·불러올 때도 사용) */
+  moveTo(zone, pos, facing, floor = 0) {
     const p = G.refs.player;
     G.state.player.zone = zone;
-    applyZone(zone);
+    G.state.player.mineFloor = zone === 'mine' ? floor : 0;
+    applyZone(zone, G.state.player.mineFloor);
     p.setPosition(pos.x, pos.z);
     if (facing !== undefined) p.facing = facing;
     G.refs.cameraCtl?.target.copy(p.pos);
+    // 밖에 있던 동안 흐른 시간만큼만 다시 생긴다
     if (zone === 'mine') this.refreshVisuals();
     EventBus.emit('zone', zone);
   },
@@ -111,16 +176,21 @@ export const MiningSystem = {
     return it?.type === 'pick' ? it : null;
   },
 
-  mine(i) {
+  /** 광맥 찾기 (없으면 이미 캐낸 것) */
+  oreById(f, id) {
+    return this.floorState(f).ores.find((e) => e.id === id) || null;
+  },
+
+  mine(f, id) {
     const p = G.refs.player;
-    if (p.work) return;
+    if (p.work || f !== this.floor()) return;
     const item = this.heldPick();
     if (!item) {
       AudioManager.sfx('error');
       return toast(InventorySystem.hasType('pick') ? '⛏️ 핫바에서 곡괭이를 골라 주세요' : '⛏️ 곡괭이가 없어요. 한 반장에게 말을 걸어 보세요', 'warn');
     }
-    const node = this.nodes()[i];
-    if (!node.ore) return toast('이미 캐낸 자리예요. 시간이 지나면 다시 광맥이 생겨요');
+    const node = this.oreById(f, id);
+    if (!node) return;
     const ore = ORES[node.ore];
     const pick = PICK_BY_ID[item.id];
     if (pick.tier < ore.tier) {
@@ -131,14 +201,16 @@ export const MiningSystem = {
       AudioManager.sfx('error');
       return toast('너무 피곤해요… 잠을 자거나 음식을 먹고 쉬어 가요 😴', 'warn');
     }
-    const pos = nodeWorldPos(i);
+    const pos = oreWorldPos(f, node);
     p.faceTo(pos.x, pos.z);
     const oreId = node.ore;
     p.startWork(Math.round(pick.time * ore.hard * 100) / 100, () => {
-      if (node.ore !== oreId) return;
-      node.ore = null;
-      node.respawnAt = absMinutes() + RESPAWN_MIN * (0.8 + Math.random() * 0.4);
-      showOreNode(i, null);
+      // 캐낸 광맥은 목록에서 빠져 아무것도 남지 않는다
+      const st = this.floorState(f);
+      const k = st.ores.indexOf(node);
+      if (k < 0) return;
+      st.ores.splice(k, 1);
+      syncFloorOres(f, st.ores);
       StaminaSystem.spend(pick.stamina);
       const n = rollOreAmount(pick);
       const stored = InventorySystem.addOrStore(oreId, n);

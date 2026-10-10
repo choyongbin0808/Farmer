@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G, currentZone } from '../core/Game.js';
+import { G, currentZone, currentMineFloor } from '../core/Game.js';
 import { NPC_ORDER, NPCS } from '../data/npcs.js';
 import { QuestSystem } from '../systems/QuestSystem.js';
 
@@ -161,7 +161,8 @@ export function updateMarkers(dt, t, playerPos, visible) {
       tag.bubble.classList.toggle('progress', icon === '❗');
     }
     const showName = d < 14 || !!qIcon;
-    const away = (NPCS[id].zone ?? 'village') !== currentZone();
+    // 다른 구역이거나, 광산 아래층에 있을 때 1층의 광산 사람들
+    const away = (NPCS[id].zone ?? 'village') !== currentZone() || (NPCS[id].zone === 'mine' && currentMineFloor() !== 0);
     tag.el.classList.toggle('hidden', away || p.behind || (!showName && !icon));
     tag.el.querySelector('.nm').classList.toggle('hidden', !showName);
     tag.el.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -100%)`;

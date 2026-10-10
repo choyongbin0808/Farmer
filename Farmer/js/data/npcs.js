@@ -1,4 +1,4 @@
-import { MINE_ORIGIN } from './mining.js';
+import { MINE_ORIGIN, ENTRANCE_PROPS } from './mining.js';
 
 const MX = MINE_ORIGIN.x, MZ = MINE_ORIGIN.z;
 
@@ -95,7 +95,8 @@ export const NPCS = {
     chat: [
       '비 오는 날 시냇물은 또 다른 맛이 있지.',
       '느긋하게 사는 게 제일이야.',
-      '찌가 쏙 들어가는 순간 바로 챔질해야 해. 머뭇거리면 놓친다네.',
+      '찌가 쏙 들어가는 순간 바로 챔질해야 해. 그다음엔 고기가 날뛰는 대로 따라가며 붙잡아 두는 거지.',
+      '힘껏 끝까지 당겨 던지면 \'완벽!\' 소리가 나지. 그럴 땐 귀한 고기가 더 잘 문다네.',
       '좋은 낚싯대일수록 귀한 놈들이 잘 물지. 게는 키토산, 물고기는 타우린으로 바꿔 주겠네.',
     ],
   },
@@ -113,7 +114,7 @@ export const NPCS = {
     ],
   },
   han: {
-    name: '한 반장', role: '광부', avatar: '👷', pos: [MX - 4.5, MZ + 5.5], face: 0, zone: 'mine',
+    name: '한 반장', role: '광부', avatar: '👷', pos: [MX + ENTRANCE_PROPS.han[0], MZ + ENTRANCE_PROPS.han[1]], face: 0, zone: 'mine',
     look: { skin: 0xd8a07a, top: 0x6a7a8a, bottom: 0x4a4038, hair: 0x2a1e16, hairStyle: 'short', beard: 0x2a1e16, cap: 0xf0c03a },
     greet: [
       '어이, 왔는가! 광산은 언제나 열려 있네.',
@@ -121,13 +122,14 @@ export const NPCS = {
       '먼지 조심하게. 허허.',
     ],
     chat: [
-      '광맥은 하룻밤 자고 나면 다시 차오르지. 캐낸 자리도 서너 시간이면 또 생긴다네.',
+      '광맥은 캐고 나도 시간이 지나면 여기저기서 조금씩 다시 솟아난다네.',
+      '이 광산은 4층까지 있다네. 층이 올라갈수록 귀한 광석이 많고, 3층부터는 석탄이나 구리는 아예 안 나오지.',
       '단단한 광석은 좋은 곡괭이가 아니면 흠집도 안 나. 돌쇠한테 가 보게.',
       '우리 집사람이 보냈다고? 허허, 그 사람 잔소리는 광산까지 들린다네.',
     ],
   },
   dolsoe: {
-    name: '돌쇠', role: '곡괭이 장수', avatar: '🧑‍🔧', pos: [MX + 5, MZ + 5.5], face: 0, zone: 'mine',
+    name: '돌쇠', role: '곡괭이 장수', avatar: '🧑‍🔧', pos: [MX + ENTRANCE_PROPS.dolsoe[0], MZ + ENTRANCE_PROPS.dolsoe[1]], face: 0, zone: 'mine',
     look: { skin: 0xe8b890, top: 0x8a4a3a, bottom: 0x3e4a5a, hair: 0x5a3a20, hairStyle: 'short', cap: 0x4a6a8a },
     greet: [
       '곡괭이 필요해요? 튼튼한 걸로 골라 드릴게요!',

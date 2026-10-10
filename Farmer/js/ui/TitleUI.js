@@ -74,21 +74,27 @@ export const TitleUI = {
     el.innerHTML = `
       <div class="title-card name-card">
         <h2>당신의 이름은?</h2>
-        <input id="name-input" maxlength="8" placeholder="이름 (최대 8자)" value="귀농인" autocomplete="off">
+        <input id="name-input" maxlength="8" placeholder="이름을 입력하세요 (최대 8자)" value="" autocomplete="off">
         <div class="title-buttons row">
           <button class="btn primary big" data-act="ok">시작하기</button>
         </div>
       </div>`;
     const input = $('name-input');
     input.focus();
-    input.select();
     const go = () => {
-      const name = input.value.trim() || '귀농인';
+      const name = input.value.trim();
+      if (!name) {
+        AudioManager.sfx('error');
+        input.placeholder = '이름을 먼저 입력해 주세요!';
+        input.focus();
+        return;
+      }
       AudioManager.sfx('click');
       this.opening(name, onNew);
     };
     el.querySelector('[data-act="ok"]').onclick = go;
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    // 한글 입력 중(조합 중) Enter 는 글자 확정용이라 무시 — 마지막 글자가 빠지거나 두 번 들어가는 것을 막는다
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) go(); });
   },
 
   /** 프롤로그 4컷 만화: 한 컷씩 나타나고(클릭 또는 잠시 후 다음 컷), 다 보면 출발 버튼 */
