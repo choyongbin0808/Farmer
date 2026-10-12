@@ -1,0 +1,270 @@
+/* 동물의 숲 느낌 UI: 포근한 크림색 둥근 패널 + 따뜻한 갈색 글씨 + 둥근 한글 글꼴 */
+:root {
+  --bg-panel: rgba(255, 250, 236, 0.95);
+  --bg-inset: #fbf3df;
+  --bg-inset-2: #f3e7cc;
+  --well: #efe2c4;
+  --line: #ecdcb8;
+  --line-strong: #d7bf92;
+  --text: #6a4c34;
+  --text-dim: #a08566;
+  --gold: #e6a93a;
+  --gold-soft: #fff1c6;
+  --green: #7cc05a;
+  --green-light: #5aa63c;
+  --green-dark: #4f8a36;
+  --red: #e2685a;
+  --orange: #f0a04a;
+  --shadow: 0 8px 22px rgba(120, 88, 50, 0.22);
+  --radius: 18px;
+  /* 글꼴은 Jua 하나로 통일 (굵기가 하나뿐이라 가짜 굵게 처리는 끔) */
+  --font-title: 'Jua', sans-serif;
+  --font-body: 'Jua', sans-serif;
+
+  /* 예전 변수 이름 호환 */
+  --cream: var(--bg-panel);
+  --cream-2: var(--bg-inset-2);
+  --brown: var(--line-strong);
+  --brown-dark: var(--text);
+  --yellow: var(--gold);
+}
+
+* { box-sizing: border-box; font-synthesis: none; }
+b, strong, h1, h2, h3, h4, th { font-weight: normal; }
+input, textarea, select, button { font-family: var(--font-body); }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #cfe8f6;
+  font-family: var(--font-body);
+  color: var(--text);
+  user-select: none;
+}
+
+#app { position: fixed; inset: 0; }
+
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hidden { display: none !important; }
+
+.panel {
+  background: var(--bg-panel);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+button { font-family: var(--font-title); cursor: pointer; }
+
+.btn {
+  font-family: var(--font-title);
+  font-size: 15px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  background: #fffaf0;
+  color: var(--text);
+  box-shadow: 0 3px 0 var(--line-strong);
+  transition: transform 0.08s, box-shadow 0.08s, background 0.15s;
+}
+.btn:hover:not(:disabled) { background: var(--gold-soft); }
+.btn:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 1px 0 var(--line-strong); }
+.btn.primary { background: var(--green); color: #fff; border-color: var(--green-dark); box-shadow: 0 3px 0 var(--green-dark); }
+.btn.primary:hover:not(:disabled) { background: #8ccf68; }
+.btn.small { font-size: 13px; padding: 4px 11px; }
+.btn.big { font-size: 18px; padding: 11px 28px; min-width: 220px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.tag {
+  display: inline-block;
+  font-size: 12px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--bg-inset-2);
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-title);
+  color: var(--text);
+}
+.tag.good { background: #e4f6d6; border-color: var(--green); color: var(--green-dark); }
+.tag.held { background: var(--gold-soft); border-color: var(--gold); color: #b07a14; }
+
+.ico { position: relative; display: inline-block; line-height: 1; }
+.sub-ico {
+  position: absolute;
+  right: -6px;
+  bottom: -4px;
+  font-size: 0.55em;
+}
+
+/* ───── 로딩 / 페이드 ───── */
+#loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #cfe8f6;
+  font-family: var(--font-title);
+  font-size: 26px;
+  color: var(--green-dark);
+  z-index: 100;
+}
+
+#fade {
+  position: fixed;
+  inset: 0;
+  background: #1e2238;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.75s;
+  z-index: 90;
+}
+#fade.on { opacity: 1; pointer-events: all; }
+
+/* ───── 타이틀 ───── */
+#title-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(255, 250, 236, 0.05), rgba(90, 60, 30, 0.28));
+  z-index: 60;
+  transition: background 0.6s;
+}
+#title-screen.dark { background: #1e2238; }
+
+.title-card {
+  text-align: center;
+  padding: 38px 60px 30px;
+  background: rgba(255, 250, 236, 0.94);
+  border: 3px solid var(--line);
+  border-radius: 32px;
+  box-shadow: var(--shadow);
+  animation: pop 0.5s ease-out;
+}
+.logo {
+  font-family: var(--font-title);
+  font-size: 72px;
+  color: var(--green-dark);
+  letter-spacing: 6px;
+  text-shadow: 0 4px 0 #fff, 0 7px 0 rgba(160, 120, 70, 0.25);
+  line-height: 1.05;
+}
+/* 게임 이름 윗줄 '🌱 초록마을' */
+.logo small { display: block; font-size: 32px; letter-spacing: 8px; color: var(--green-light); margin-bottom: 2px; }
+.subtitle { font-family: var(--font-title); font-size: 20px; margin-top: 6px; }
+.genre { font-size: 14px; color: var(--text-dim); margin: 4px 0 24px; }
+.title-buttons { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.title-buttons.row { flex-direction: row; justify-content: center; margin-top: 18px; }
+.title-hint { margin-top: 20px; font-size: 13px; color: var(--text-dim); }
+/* 장르 문구를 뺀 자리만큼 부제와 버튼 사이를 띄운다 */
+.title-card > .subtitle + .title-buttons { margin-top: 26px; }
+
+.name-card h2 { font-family: var(--font-title); font-weight: normal; font-size: 28px; margin: 0 0 18px; }
+.name-card input {
+  font-family: var(--font-title);
+  font-size: 22px;
+  text-align: center;
+  padding: 10px 16px;
+  width: 280px;
+  border: 2px solid var(--line-strong);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+  outline: none;
+}
+.name-card input:focus { border-color: var(--gold); }
+
+/* ───── 프롤로그 만화 (책 한 쪽) ───── */
+#title-screen.comic-bg {
+  background: #3a2c24 radial-gradient(ellipse at 50% 40%, #5a463a 0%, #2c211b 75%);
+  cursor: pointer;
+}
+.comic {
+  width: min(1040px, 94vw, calc((100vh - 170px) * 1.5625));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.comic-head { width: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
+.comic-title {
+  font-family: var(--font-title);
+  font-size: 24px;
+  letter-spacing: 6px;
+  color: #fff6e0;
+  padding: 0 4px 2px;
+  border-bottom: 3px solid #e2a04a;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+.comic-skip { position: absolute; right: 0; }
+/* 종이 한 장: 흰 여백 + 살짝 누런 종이 그림자 */
+.comic-page {
+  position: relative;
+  width: 100%;
+  padding: 1.6%;
+  background: #fffdf7;
+  border-radius: 3px;
+  box-shadow: 0 1px 0 #e8dcc4, 6px 8px 0 -2px #e9dcc0, 0 22px 50px rgba(0, 0, 0, 0.45);
+}
+.comic-page svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* 컷: 차례로 나타난다 */
+.comic-page .cut { opacity: 0; translate: 0 14px; transition: opacity 0.45s ease-out, translate 0.55s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.comic-page .cut.show { opacity: 1; translate: 0 0; }
+/* 나레이션 상자 (페이지 기준 % 위치) */
+.cut-cap {
+  position: absolute;
+  z-index: 2;
+  margin: 1.6%;
+  font-family: var(--font-title);
+  font-size: clamp(11px, 1.35vw, 16px);
+  line-height: 1.42;
+  padding: 0.35em 0.75em 0.4em;
+  background: #fffdf3;
+  border: 2px solid #2a1d17;
+  color: #2a1d17;
+  text-align: left;
+  word-break: keep-all;
+  opacity: 0;
+  translate: 0 -6px;
+  transition: opacity 0.35s 0.15s, translate 0.35s 0.15s;
+}
+.cut-cap.show { opacity: 1; translate: 0 0; }
+/* 컷이 나타난 뒤 말풍선 · 의성어가 톡 튀어나온다 */
+.cut .bubble-pop, .cut .sfx { transform-box: fill-box; transform-origin: center; opacity: 0; }
+.cut.show .bubble-pop { animation: bubblePop 0.35s 0.5s cubic-bezier(0.2, 1.8, 0.4, 1) both; }
+.cut.show .sfx { animation: sfxIn 0.4s 0.75s cubic-bezier(0.2, 1.8, 0.4, 1) both, sfxShake 1.6s 1.2s ease-in-out infinite; }
+@keyframes bubblePop { from { opacity: 0; scale: 0.3; } to { opacity: 1; scale: 1; } }
+@keyframes sfxIn { from { opacity: 0; scale: 1.8; } to { opacity: 1; scale: 1; } }
+@keyframes sfxShake { 0%, 100% { translate: 0 0; } 25% { translate: -1px 1px; } 75% { translate: 1px -1px; } }
+.comic-foot { min-height: 52px; display: flex; align-items: center; justify-content: center; }
+.comic-hint { color: #d8c8b0; font-family: var(--font-title); }
+.comic-start { animation: pop 0.4s ease-out; }
+
+/* 만화 속 작은 움직임 */
+.cut .twinkle { animation: twinkle 1.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.cut .float { animation: comicFloat 2s ease-in-out infinite; }
+.cut .drift { animation: drift 6s ease-in-out infinite; }
+.cut .bob { animation: bob2 0.5s ease-in-out infinite; }
+.cut .spin { animation: spin 12s linear infinite; }
+.cut .drip { animation: drip 1.6s ease-in infinite; }
+@keyframes twinkle { 0%, 100% { opacity: 1; scale: 1; } 50% { opacity: 0.4; scale: 0.7; } }
+@keyframes comicFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+@keyframes drift { 0%, 100% { translate: 0 0; } 50% { translate: 10px 0; } }
+@keyframes bob2 { 0%, 100% { translate: 0 0; } 50% { translate: 0 -2px; } }
+@keyframes spin { to { rotate: 360deg; } }
+@keyframes drip { 0% { translate: 0 0; opacity: 1; } 80% { translate: 0 8px; opacity: 1; } 100% { translate: 0 10px; opacity: 0; } }
+
+@keyframes pop {
+  from { transform: scale(0.94); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

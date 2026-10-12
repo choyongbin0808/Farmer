@@ -1,0 +1,444 @@
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+#hud > * { pointer-events: auto; }
+
+.hud-box { position: absolute; padding: 10px 18px; font-family: var(--font-title); }
+.hud-row { font-size: 16px; line-height: 1.55; white-space: nowrap; }
+
+/* 좌측 상단: 플레이어 정보 */
+#hud-player { top: 14px; left: 14px; min-width: 230px; }
+#hud-player .name { font-size: 19px; }
+#hud-player .rank span { color: var(--green-dark); }
+#hud-player .money span { color: #c98a1e; }
+
+.stamina { position: relative; display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.stamina-icon { font-size: 15px; }
+.stamina-bar {
+  position: relative;
+  width: 130px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  background: var(--well);
+  overflow: hidden;
+}
+#stamina-fill { height: 100%; border-radius: 999px; transition: width 0.25s, background 0.3s; }
+#stamina-fill.high { background: linear-gradient(#9ee07a, #6cc04a); }
+#stamina-fill.mid { background: linear-gradient(#ffe07a, #f0be2a); }
+#stamina-fill.low { background: linear-gradient(#ffb07a, #f0803a); }
+#stamina-preview {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.65);
+  border-left: 1px dashed var(--line-strong);
+  display: none;
+}
+#stamina-preview.lack { background: rgba(226, 104, 90, 0.6); }
+#stamina-text { font-size: 13px; min-width: 64px; color: var(--text-dim); }
+#set-badge { font-size: 15px; cursor: help; }
+#stamina-float-layer { position: absolute; left: 150px; top: -6px; pointer-events: none; }
+.stamina-float {
+  position: absolute;
+  font-family: var(--font-title);
+  font-size: 18px;
+  animation: floatUp 1.2s ease-out forwards;
+  text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff;
+}
+.stamina-float.minus { color: var(--red); }
+.stamina-float.plus { color: var(--green-dark); }
+@keyframes floatUp {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-30px); opacity: 0; }
+}
+
+/* 우측 상단: 날짜 / 시간 / 날씨 */
+#hud-time { top: 14px; right: 14px; text-align: right; min-width: 170px; }
+#hud-time b { color: var(--green-dark); }
+
+#quest-tracker {
+  position: absolute;
+  top: 100px;
+  right: 14px;
+  width: 280px;
+  padding: 10px 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.tr-title { font-family: var(--font-title); font-size: 16px; margin-bottom: 4px; }
+.tr-title.main { color: #c98a1e; }
+.tr-title.sub { color: var(--green-dark); }
+.tr-obj { line-height: 1.55; }
+.tr-obj b { float: right; font-family: var(--font-title); }
+.tr-obj.done { color: var(--green-dark); }
+
+/* 중앙 하단: 핫바 */
+#hotbar-wrap {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+#held-name {
+  font-family: var(--font-title);
+  font-size: 15px;
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  border: 2px solid var(--line);
+  min-height: 26px;
+}
+#held-name:empty { visibility: hidden; }
+/* 배치 모드 · 낚시 안내 */
+#play-hint {
+  font-family: var(--font-title);
+  font-size: 15px;
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: rgba(60, 44, 28, 0.82);
+  color: #fff8e6;
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+  pointer-events: none;
+}
+#play-hint b { color: #ffd86a; font-weight: normal; }
+#play-hint .ok { color: #b8ef8c; }
+#play-hint .bad { color: #ffab9a; }
+#hotbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border: 2px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+}
+
+.slot {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  border-radius: 16px;
+  border: 2px solid var(--line);
+  background: #fffdf6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.15s, box-shadow 0.15s;
+}
+.slot:hover { transform: translateY(-2px); border-color: var(--line-strong); }
+.slot.selected { border: 3px solid var(--gold); box-shadow: 0 0 0 3px rgba(230, 169, 58, 0.3); background: #fff6d2; }
+.slot.dim { opacity: 0.3; }
+.slot .key {
+  position: absolute;
+  top: 2px;
+  left: 7px;
+  font-family: var(--font-title);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.slot-inner { font-size: 30px; display: flex; align-items: center; justify-content: center; }
+.slot .cnt {
+  position: absolute;
+  right: 5px;
+  bottom: 2px;
+  font-family: var(--font-title);
+  font-size: 14px;
+  color: var(--text);
+  text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+}
+.lv {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  font-family: var(--font-title);
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: #fff;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+.slot .wt {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-family: var(--font-title);
+  font-size: 10px;
+  color: var(--text);
+  text-shadow: 1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff;
+}
+.slot .fish-grade { position: absolute; left: 4px; top: 2px; font-size: 8px; letter-spacing: -1px; color: var(--gold); }
+
+/* 우측 하단: 퀘스트 / 가방 */
+#hud-buttons { position: absolute; right: 16px; bottom: 16px; display: flex; gap: 10px; align-items: flex-end; }
+.round-btn {
+  width: 74px;
+  height: 74px;
+  border-radius: 24px;
+  border: 2px solid var(--line);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow), 0 4px 0 var(--line-strong);
+  font-size: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: transform 0.1s, background 0.15s;
+  color: var(--text);
+}
+.round-btn span { font-size: 13px; margin-top: 4px; color: var(--text); }
+.round-btn:hover { transform: translateY(-3px); background: #fffdf4; }
+.round-btn.small { width: 48px; height: 48px; font-size: 20px; border-radius: 16px; }
+
+/* 토스트 / 배너 */
+#toasts {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 70;
+  pointer-events: none;
+}
+.toast {
+  font-family: var(--font-title);
+  font-size: 16px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  background: var(--bg-panel);
+  border: 2px solid var(--line-strong);
+  box-shadow: var(--shadow);
+  animation: toastIn 0.25s ease-out;
+  transition: opacity 0.4s, transform 0.4s;
+  max-width: 70vw;
+  text-align: center;
+}
+.toast.good { border-color: var(--green); background: #f2fbe8; }
+.toast.warn { border-color: var(--orange); background: #fff3e2; }
+.toast.out { opacity: 0; transform: translateY(-8px); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+
+#banner {
+  position: fixed;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.85);
+  text-align: center;
+  padding: 18px 44px;
+  border-radius: 28px;
+  background: var(--bg-panel);
+  border: 3px solid var(--line);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s, transform 0.35s;
+  z-index: 65;
+}
+#banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.b-title { font-family: var(--font-title); font-size: 32px; color: var(--green-dark); }
+.b-sub { font-size: 16px; margin-top: 4px; }
+
+/* 3D 위 표시 (수확 표시, 말풍선, 이름표) */
+#markers { position: fixed; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+.mk { position: absolute; left: 0; top: 0; will-change: transform; }
+/* 작업 진행 게이지 (플레이어 머리 위) */
+.work-gauge {
+  width: 46px;
+  height: 8px;
+  padding: 1.5px;
+  border-radius: 999px;
+  background: rgba(70, 50, 30, 0.55);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.work-gauge i { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(#b8ef8c, #6cc04a); }
+.mk.harvest {
+  pointer-events: auto;
+  cursor: pointer;
+  font-size: 22px;
+  margin: -19px 0 0 -18px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 2px solid var(--green);
+  box-shadow: 0 3px 8px rgba(90, 60, 30, 0.3);
+}
+.mk.harvest:hover { background: var(--gold-soft); }
+.npc-tag { display: flex; flex-direction: column; align-items: center; }
+.npc-tag .nm {
+  font-family: var(--font-title);
+  font-size: 13px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: rgba(255, 250, 236, 0.9);
+  border: 1.5px solid var(--line-strong);
+  white-space: nowrap;
+}
+.npc-tag .bubble {
+  font-size: 18px;
+  margin-bottom: 3px;
+  padding: 2px 9px;
+  border-radius: 14px;
+  background: #fff;
+  border: 2px solid var(--line-strong);
+  animation: bob 1.4s ease-in-out infinite;
+}
+.npc-tag .bubble.quest { background: var(--gold-soft); border-color: var(--gold); }
+/* 진행 중인 퀘스트 관련 주민: 빨간 느낌표 */
+.npc-tag .bubble.progress {
+  background: #ffe6e1;
+  border-color: #e2443a;
+  box-shadow: 0 0 0 3px rgba(226, 68, 58, 0.18);
+}
+@keyframes bob { 0%, 100% { margin-bottom: 3px; } 50% { margin-bottom: 8px; } }
+/* ───── 낚시: 파워 게이지 · 미니게임 (스타듀밸리식 세로 막대) ───── */
+#fish-ui {
+  position: fixed;
+  right: 22%;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  pointer-events: none; /* 누르기는 화면(캔버스)이 받는다 */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+#fish-ui .hidden { display: none !important; }
+.fu-power {
+  position: relative;
+  width: 34px;
+  height: 220px;
+  border-radius: 14px;
+  background: rgba(40, 30, 20, 0.6);
+  border: 3px solid #fff8e6;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.fu-power-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; border-radius: 9px; }
+.fu-perfect {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-title);
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 0 4px #e6a93a;
+  opacity: 0;
+}
+.fu-perfect.show { opacity: 1; }
+.fu-game {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 18px;
+  background: #d8b688;
+  border: 4px solid #6a4a30;
+  box-shadow: var(--shadow), inset 0 0 0 3px #f0d6aa;
+}
+.fu-track {
+  position: relative;
+  width: 46px;
+  height: 300px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 3px solid #6a4a30;
+}
+.fu-water { position: absolute; inset: 0; background: linear-gradient(#7fd0ee, #2e7aa8); }
+.fu-bar {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 0;
+  border-radius: 8px;
+  background: rgba(124, 220, 90, 0.55);
+  border: 3px solid #4f9a36;
+  transition: background 0.1s;
+}
+.fu-bar.on { background: rgba(160, 255, 110, 0.85); border-color: #2f7a1a; }
+.fu-fish {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%) scaleX(-1);
+  font-size: 26px;
+  line-height: 28px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+}
+.fu-prog {
+  position: relative;
+  width: 14px;
+  height: 300px;
+  border-radius: 7px;
+  background: rgba(40, 30, 20, 0.45);
+  border: 2px solid #6a4a30;
+  overflow: hidden;
+}
+.fu-prog i { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; border-radius: 5px; }
+
+/* 상황 말풍선: 낚시 입질 ❗ · 시설 진행 */
+.dyn-tag {
+  font-family: var(--font-title);
+  font-size: 13px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 250, 236, 0.92);
+  border: 1.5px solid var(--line-strong);
+  white-space: nowrap;
+}
+.dyn-tag.done { background: #eaf8dc; border-color: var(--green); color: var(--green-dark); animation: bob 1.4s ease-in-out infinite; }
+.dyn-tag.bite {
+  font-size: 30px;
+  padding: 0 12px;
+  background: var(--gold-soft);
+  border: 3px solid var(--gold);
+  animation: biteShake 0.12s linear infinite alternate;
+}
+@keyframes biteShake { from { margin-left: -3px; } to { margin-left: 3px; } }
+.float-text {
+  font-family: var(--font-title);
+  font-size: 26px;
+  margin: -14px 0 0 -14px;
+  text-shadow: 2px 2px 0 #fff, -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff;
+}
+
+#edge-arrow {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 8;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#edge-arrow > * { transform-origin: center; }
+#edge-arrow .arr {
+  font-size: 32px;
+  color: var(--gold);
+  text-shadow: 0 0 4px #fff, 0 0 8px rgba(0, 0, 0, 0.25);
+  margin: -20px 0 0 -14px;
+}
+#edge-arrow .lbl {
+  font-family: var(--font-title);
+  font-size: 13px;
+  background: rgba(255, 250, 236, 0.92);
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 0 9px;
+  white-space: nowrap;
+  transform: translateX(-40%);
+}
