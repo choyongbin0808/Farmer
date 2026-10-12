@@ -32,13 +32,13 @@ Object.assign(ITEMS, {
   food_bread:    { id: 'food_bread',    name: '새참 빵',       type: 'food', heal: 20, price: 40, icon: '🍞', stack: 99 },
   food_tea:      { id: 'food_tea',      name: '시냇물 약초차', type: 'food', heal: 30, price: 80, icon: '🍵', stack: 99, unlockFlag: 'tea' },
   food_lunchbox: { id: 'food_lunchbox', name: '할머니 도시락', type: 'food', heal: 50, icon: '🍱', stack: 99 },
-  // growDays: 사용 시 앞당기는 성장 일수 ('all' = 바로 다 자람)
+  // growSec: 사용 시 앞당기는 성장 시간(실제 초) ('all' = 바로 다 자람)
   special_fertilizer: {
-    id: 'special_fertilizer', name: '할머니의 비료', type: 'special', icon: '🧪', stack: 99, growDays: 1,
-    desc: '자라고 있는 작물에 사용하면 성장이 하루 앞당겨져요.',
+    id: 'special_fertilizer', name: '할머니의 비료', type: 'special', icon: '🧪', stack: 99, growSec: 15,
+    desc: '자라고 있는 작물에 사용하면 성장이 15초 앞당겨져요.',
   },
   special_growth: {
-    id: 'special_growth', name: '성장 촉진제', type: 'special', icon: '⏩', stack: 99, growDays: 'all', price: 300,
+    id: 'special_growth', name: '성장 촉진제', type: 'special', icon: '⏳', svg: 'hourglass', stack: 99, growSec: 'all', price: 300,
     desc: '자라고 있는 작물에 사용하면 남은 시간을 모두 앞당겨 바로 다 자라요.',
   },
 });
@@ -81,7 +81,7 @@ for (const [id, f] of Object.entries(FISH)) {
   ITEMS[id] = { id, name: f.name, type: 'fish', crab: !!f.crab, grade: f.grade, icon: f.icon, color: f.color, stack: 1 };
 }
 
-// 시설 (상점에서 사서 가방 '시설' 칸에 두었다가 배치)
+// 시설 아이템 — 예전 세이브 호환용 (불러오면 지하 작업실에 설치로 바뀐다)
 for (const [kind, f] of Object.entries(FACILITIES)) {
   ITEMS[f.itemId] = { id: f.itemId, name: f.name, type: 'facility', kind, icon: f.icon, price: f.price, stack: 99, desc: f.desc };
 }

@@ -1,9 +1,8 @@
 import { G } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
-import { NPCS } from '../data/npcs.js';
+import { NPCS, chiefRetired } from '../data/npcs.js';
 import { getItem } from '../data/items.js';
 import { HALL_COST } from '../data/mainQuests.js';
-import { RelationSystem } from './RelationSystem.js';
 import { QuestSystem } from './QuestSystem.js';
 import { InventorySystem } from './InventorySystem.js';
 import { MiningSystem } from './MiningSystem.js';
@@ -13,8 +12,7 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function speaker(id) {
   const n = NPCS[id];
-  const hearts = RelationSystem.isResident(id) ? ' ' + '❤️'.repeat(RelationSystem.hearts(id)) : '';
-  return { name: `${n.name} · ${n.role}${hearts}`, avatar: n.avatar };
+  return { name: `${n.name} · ${n.role}`, avatar: n.avatar };
 }
 
 function objectiveSummary(q) {
@@ -31,8 +29,10 @@ function greeting(id, first) {
   const h = G.state.time.minutes / 60;
   if (first && w === 'rain') return pick(['비가 오네. 작물들은 좋아하겠어.', '오늘은 비 덕분에 물 줄 걱정은 없겠구먼.', n.greet[0]]);
   if (first && w === 'snow') return pick(['눈이 오니 마을이 하얗네!', '춥지 않게 조심해.', n.greet[0]]);
-  if (h >= 20) return pick(['밤이 늦었네. 얼른 들어가 쉬어.', '이 시간까지 일하는 거야? 무리하지 마.', ...n.greet]);
-  return pick(n.greet);
+  // 부이장이 된 박 할아버지는 새 이장(주인공)을 이장님이라 부른다
+  const greet = n.greetRetired && chiefRetired() ? n.greetRetired : n.greet;
+  if (h >= 20) return pick(['밤이 늦었네. 얼른 들어가 쉬어.', '이 시간까지 일하는 거야? 무리하지 마.', ...greet]);
+  return pick(greet);
 }
 
 export const DialogueSystem = {
@@ -48,7 +48,10 @@ export const DialogueSystem = {
     npcEnt.faceTo(player.pos.x, player.pos.z);
     player.faceTo(npcEnt.pos.x, npcEnt.pos.z);
 
-    const first = RelationSystem.dailyTalk(npcId);
+    // 오늘 처음 말을 거는 건지 (첫인사 대사용)
+    const talked = G.state.talkedToday;
+    const first = !talked[npcId];
+    talked[npcId] = true;
     EventBus.emit('talk', npcId);
 
     let openAfter = null;
@@ -122,7 +125,7 @@ export const DialogueSystem = {
 
   async chat(npcId) {
     const n = NPCS[npcId];
-    await DialogueUI.say(speaker(npcId), [pick(n.chat)]);
+    await DialogueUI.say(speaker(npcId), [pick(n.chatRetired && chiefRetired() ? n.chatRetired : n.chat)]);
     return true;
   },
 
@@ -141,7 +144,6 @@ export const DialogueSystem = {
   async doDeliver(npcId, d) {
     QuestSystem.deliver(d);
     await DialogueUI.say(speaker(npcId), ['와, 이걸 나한테? 정말 고마워!', `${NPCS[d.q.giver].name}에게도 고맙다고 전해 줘.`]);
-    RelationSystem.add(npcId, 5);
     return true;
   },
 

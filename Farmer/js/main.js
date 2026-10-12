@@ -6,8 +6,11 @@ import { AudioManager } from './core/AudioManager.js';
 import { saveGame, loadGame, hasSave, deleteSave, loadSettings } from './core/SaveManager.js';
 import { SM } from './world/SceneManager.js';
 import { CameraController } from './world/CameraController.js';
-import { buildWorld, updateWorld, updateDecorations, interactables, BUILDINGS, plotPosition, STREAM_Z, FARM_SIGN_POS } from './world/World.js';
-import { buildMine, applyZone, MINE_EXIT, oreWorldPos, ladderPos } from './world/Mine.js';
+import { buildWorld, updateWorld, updateDecorations, interactables, BUILDINGS, plotPosition, STREAM_Z, FARM_SIGN_POS, farmCenter, PLOT_STEP, nearPath } from './world/World.js';
+import { buildMine, applyZone, MINE_EXIT, oreWorldPos, ladderPos, liftPos, zoneLights } from './world/Mine.js';
+import { buildInteriors, updateInteriors, isRoom, roomSpots, updateSoilBoxes } from './world/Interiors.js';
+import { SoilBoxSystem, SOIL_BOX_CAP } from './systems/SoilBoxSystem.js';
+import { SoilBoxUI } from './ui/SoilBoxUI.js';
 import { updateDayNight, periodOf } from './world/DayNight.js';
 import { initWeather, setWeather, updateWeather } from './world/Weather.js';
 import { initEffects, updateEffects } from './world/Effects.js';
@@ -27,11 +30,13 @@ import { CheatSystem } from './systems/CheatSystem.js';
 import { FishingSystem } from './systems/FishingSystem.js';
 import { MiningSystem } from './systems/MiningSystem.js';
 import { FacilitySystem } from './systems/FacilitySystem.js';
+import { InteriorSystem } from './systems/InteriorSystem.js';
 import { initHUD, updateHUD, renderHotbar, renderTracker, setStaminaPreview, toast, fade, showHUD } from './ui/HUD.js';
 import { FishingUI } from './ui/FishingUI.js';
 import { BookUI } from './ui/BookUI.js';
 import { MineUI } from './ui/MineUI.js';
 import { FacilityUI } from './ui/FacilityUI.js';
+import { WardrobeUI } from './ui/WardrobeUI.js';
 import { closeModal } from './ui/Panels.js';
 import { DialogueUI } from './ui/DialogueUI.js';
 import { InventoryUI } from './ui/InventoryUI.js';
@@ -73,6 +78,7 @@ async function boot() {
   SM.init(canvas);
   buildWorld(SM.scene);
   buildMine(SM.scene);
+  buildInteriors(SM.scene);
   initWeather(SM.scene);
   initEffects(SM.scene);
 
@@ -128,6 +134,9 @@ async function boot() {
   BookUI.init();
   MineUI.init();
   FacilityUI.init();
+  WardrobeUI.init();
+  SoilBoxUI.init();
+  EventBus.on('soil', () => updateSoilBoxes(SoilBoxSystem.boxes(), SOIL_BOX_CAP));
   QuestSystem.init();
   GearSystem.init();
   FishingSystem.init(SM.scene);
@@ -144,13 +153,11 @@ async function boot() {
   MenuUI.onTitle = goTitle;
   MenuUI.onEnding = () => playEnding(() => toast('🎬 엔딩을 다시 봤어요. 계속 즐겨 주세요!', 'good'));
   G.refs.eatHeld = eatHeld;
-  // 잠들기 · 타이틀로 갈 때 하던 낚시 · 배치를 정리
+  // 잠들기 · 타이틀로 갈 때 · 건물에 드나들 때 하던 낚시를 정리
   G.refs.cancelActivities = () => {
     FishingSystem.cancel();
-    FacilitySystem.cancelPlacement(true);
   };
 
-  EventBus.on('heartUp', (id) => toast(`❤️ ${NPCS[id].name}와(과) 더 친해졌어요!`, 'good'));
 
   Input.init(canvas, {
     onKey,
@@ -203,11 +210,14 @@ async function begin(state, isNew) {
     n.resetHome();
   }
   FarmSystem.refreshAll();
+  // 시설은 모두 지하 작업실 자리로 (예전 세이브의 마을 배치 · 가방 속 시설도 옮긴다)
+  FacilitySystem.normalize();
   FacilitySystem.refreshAll();
+  updateSoilBoxes(SoilBoxSystem.boxes(), SOIL_BOX_CAP);
   updateDecorations(state.flags);
   setWeather(state.time.weather, true);
-  // 광산에서 저장했으면 광산 안에서 이어 한다
-  const zone = state.player.zone === 'mine' && state.flags.mine ? 'mine' : 'village';
+  // 광산 · 집 · 마을회관 안에서 저장했으면 그 안에서 이어 한다
+  const zone = (state.player.zone === 'mine' && state.flags.mine) || isRoom(state.player.zone) ? state.player.zone : 'village';
   state.player.zone = zone;
   if (zone !== 'mine') state.player.mineFloor = 0;
   applyZone(zone, state.player.mineFloor ?? 0);
@@ -228,7 +238,7 @@ async function begin(state, isNew) {
     state.flags.introDone = true;
     saveGame();
     toast('💡 밭을 클릭하면 갈기·물 주기·수확을 알아서 해요. 심을 씨앗은 핫바에서 골라요');
-    setTimeout(() => toast('💡 머리 위 빨간 ❗는 진행 중인 퀘스트와 관련된 사람이에요'), 3200);
+    setTimeout(() => toast('💡 머리 위 빨간 ❗는 지금 퀘스트 단계에서 찾아가야 할 사람이에요'), 3200);
     setTimeout(() => toast('💡 📜 퀘스트 창에서 "위치 표시"를 누르면 길을 알려 줘요'), 6400);
   } else {
     toast(`🌱 ${state.player.name} 님, 다시 오신 걸 환영해요!`, 'good');
@@ -251,7 +261,6 @@ function onKey(code) {
   }
   if (code === 'Escape') {
     if (G.ui.modal) closeModal();
-    else if (FacilitySystem.isPlacing()) FacilitySystem.cancelPlacement();
     else if (FishingSystem.active()) FishingSystem.cancel('🎣 낚싯줄을 감았어요');
     else if (G.mode === 'play' && !G.ui.fading) MenuUI.openPause();
     return;
@@ -263,7 +272,6 @@ function onKey(code) {
     return;
   }
   if (G.ui.fading || G.mode !== 'play') return;
-  if (FacilitySystem.isPlacing() && code === 'KeyR') return FacilitySystem.rotatePlacement();
   if (FishingSystem.active() && (code === 'Space' || code === 'Enter' || code === 'KeyE')) {
     FishingSystem.action();
     return;
@@ -299,25 +307,12 @@ function groundPoint(x, y) {
 
 function onClick(x, y) {
   if (G.mode !== 'play' || isUIBlocking()) return;
-  if (FacilitySystem.isPlacing()) {
-    const p = groundPoint(x, y);
-    if (p) FacilitySystem.movePlacement(p.x, p.z);
-    FacilitySystem.confirmPlacement();
-    return;
-  }
   if (FishingSystem.active()) {
     FishingSystem.action();
     return;
   }
   const hit = pick(x, y, [...interactables, ...plotMeshes]);
-  // 핫바에서 시설(약탕기·육묘장)을 들고 땅을 누르면 배치 모드
   const heldItem = InventorySystem.getHeldItem();
-  if (heldItem?.type === 'facility' && (!hit || hit.type === 'plot' || hit.type === 'water')) {
-    FacilitySystem.startPlacement(heldItem.kind);
-    const p = groundPoint(x, y);
-    if (p && FacilitySystem.isPlacing()) FacilitySystem.movePlacement(p.x, p.z);
-    return;
-  }
   if (!hit) {
     if (heldItem?.type === 'food') eatHeld();
     return;
@@ -331,6 +326,15 @@ function onClick(x, y) {
   else if (hit.type === 'ore') interactOre(hit.floor, hit.oreId);
   else if (hit.type === 'mineExit') interactMineExit();
   else if (hit.type === 'mineLadder') interactLadder(hit.dir);
+  else if (hit.type === 'mineLift') interactLift();
+  else if (hit.type === 'furniture') interactFurniture(hit.id, hit.room);
+}
+
+/** 집 · 마을회관 안 가구 · 장식 · 문 */
+function interactFurniture(id, room) {
+  const spot = roomSpots(room).find((e) => e.id === id);
+  if (!spot) return;
+  approach(spot.x, spot.z, spot.reach, () => InteriorSystem.interact(id));
 }
 
 function interactWater(point) {
@@ -369,6 +373,13 @@ function interactLadder(dir) {
   approach(p.x, p.z, dir === 'down' ? 2.4 : 1.6, () => MiningSystem.changeFloor(dir));
 }
 
+/** 광산 승강기: 2층부터 바로 1층(입구)으로 */
+function interactLift() {
+  const p = liftPos(currentMineFloor());
+  if (!p) return;
+  approach(p.x, p.z, 1.6, () => MiningSystem.takeLift());
+}
+
 function interactFarmSign() {
   approach(FARM_SIGN_POS.x, FARM_SIGN_POS.z - 1, 2.4, () => FarmUI.openExpand());
 }
@@ -401,12 +412,13 @@ function interactNpc(id) {
   approach(n.pos.x, n.pos.z, 2.4, () => DialogueSystem.talkTo(id));
 }
 
-const BUILDING_NPC = { shop: 'shop', forge: 'smith', hall: 'chief', grandma: 'grandma', sua: 'sua' };
+const BUILDING_NPC = { shop: 'shop', forge: 'smith', grandma: 'grandma', sua: 'sua' };
 
 function interactBuilding(id) {
   const b = BUILDINGS[id];
   approach(b.ix, b.iz, 2.4, () => {
-    if (id === 'house') MenuUI.confirmSleep(() => TimeSystem.sleep());
+    // 우리 집 · 마을회관은 안으로 들어간다 (이장님은 회관 앞에 서 계신다)
+    if (id === 'house' || id === 'hall') InteriorSystem.enter(id);
     else if (id === 'storage') StorageUI.open();
     else if (id === 'mine') MiningSystem.enter();
     else if (BUILDING_NPC[id]) DialogueSystem.talkTo(BUILDING_NPC[id]);
@@ -437,13 +449,17 @@ function interactNearest() {
       const p = ladderPos(floor, dir);
       if (p) near(p.x, p.z, () => interactLadder(dir), 1);
     }
+    const lp = liftPos(floor);
+    if (lp) near(lp.x, lp.z, interactLift, 0.4);
+  } else if (isRoom(zone)) {
+    for (const e of roomSpots(zone)) near(e.x, e.z, () => interactFurniture(e.id, zone), e.reach - 1.4);
+    if (zone === 'cellar') G.state.facilities.forEach((f, i) => near(f.x, f.z, () => interactFacility(i), FacilitySystem.reach(i) - 1.4));
   } else {
     for (const [id, b] of Object.entries(BUILDINGS)) {
       if (BUILDING_NPC[id]) continue;
       near(b.ix, b.iz, () => interactBuilding(id));
     }
     near(FARM_SIGN_POS.x, FARM_SIGN_POS.z, interactFarmSign);
-    G.state.facilities.forEach((f, i) => near(f.x, f.z, () => interactFacility(i), FacilitySystem.reach(i) - 1.4));
   }
   if (best) best();
   else toast('가까이에 상호작용할 대상이 없어요');
@@ -472,12 +488,6 @@ function updateHover() {
     canvas.style.cursor = 'default';
     return;
   }
-  if (FacilitySystem.isPlacing()) {
-    const p = groundPoint(Input.mouse.x, Input.mouse.y);
-    if (p) FacilitySystem.movePlacement(p.x, p.z);
-    canvas.style.cursor = 'crosshair';
-    return;
-  }
   if (FishingSystem.active()) {
     canvas.style.cursor = 'pointer';
     return;
@@ -499,8 +509,22 @@ function updateHover() {
   if (pv.cost) setStaminaPreview(pv.cost);
 }
 
+/** 지금 밟고 있는 바닥: 나무 바닥(집 · 회관) · 돌(광산 · 지하) · 밭흙 · 흙길 · 풀밭 */
+function groundSurface(zone) {
+  if (zone === 'house' || zone === 'hall') return 'wood';
+  if (zone === 'mine' || zone === 'cellar') return 'stone';
+  const p = player.pos;
+  const size = G.state?.farm.size ?? 3;
+  const c = farmCenter(size);
+  const half = (size * PLOT_STEP) / 2;
+  if (Math.abs(p.x - c.x) < half && Math.abs(p.z - c.z) < half) return 'soil';
+  return nearPath(p.x, p.z, 0.3) ? 'path' : 'grass';
+}
+
 // ───────── 메인 루프 ─────────
 function loop(now) {
+  // 다음 프레임을 먼저 예약 — 이번 프레임 어딘가에서 오류가 나도 게임이 통째로 멈추지 않게
+  requestAnimationFrame(loop);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   clock += dt;
@@ -508,6 +532,7 @@ function loop(now) {
   const free = playing && !isUIBlocking();
 
   const inMine = playing && currentZone() === 'mine';
+  const inRoom = playing && isRoom(currentZone());
   if (free) TimeSystem.update(dt);
   player.update(dt, Input, cam.basis(), free);
   for (const n of Object.values(G.refs.npcs)) n.update(dt, clock);
@@ -526,18 +551,27 @@ function loop(now) {
   const minutes = env ? env.minutes : G.state ? G.state.time.minutes : 9.5 * 60;
   const weather = env ? env.weather : G.state ? G.state.time.weather : 'sunny';
   const focus = G.mode === 'title' ? TITLE_CENTER : player.pos;
-  updateDayNight(minutes, weather, focus, inMine);
+  updateDayNight(minutes, weather, focus, inMine ? 'mine' : inRoom ? (currentZone() === 'cellar' ? 'cellar' : 'room') : false);
+  // 집 · 마을회관 안: 카메라 쪽 벽 자르기 · 창밖 하늘 · 등불
+  if (inRoom) updateInteriors(currentZone(), SM.camera.position, minutes, clock, zoneLights);
   if (env?.dim) {
     // 예고편처럼 어둑한 밤 — 꼬마전구·가로등 불빛이 돋보이게
     SM.hemi.intensity *= env.dim;
     SM.sun.intensity *= env.dim;
   }
   updateWeather(dt, focus, clock);
+  cam.maxDist = inRoom ? (currentZone() === 'cellar' ? 17 : 13.5) : Infinity;
   cam.update(dt, player.pos);
 
   const period = periodOf(minutes);
-  AudioManager.setPeriod(period);
-  AudioManager.updateAmbient(dt, { weather, period, distToStream: Math.abs(focus.z - STREAM_Z), indoor: inMine });
+  // 광산 안에서는 동굴 BGM
+  AudioManager.setPeriod(inMine ? 'mine' : period);
+  AudioManager.updateWork(player.work, !!player.vehicle);
+  // 공간에 맞는 잔향 · 바닥 재질에 맞는 발소리
+  const zoneNow = playing ? currentZone() : 'village';
+  AudioManager.setSpace(zoneNow === 'mine' || zoneNow === 'cellar' ? 'cave' : inRoom ? 'room' : 'outdoor');
+  if (playing && !player.work && !player.vehicle) AudioManager.updateSteps(player.walkT, player.moving, groundSurface(zoneNow));
+  AudioManager.updateAmbient(dt, { weather, period, distToStream: Math.abs(focus.z - STREAM_Z), indoor: inMine, room: inRoom ? currentZone() : null });
 
   hoverTimer -= dt;
   if (hoverTimer <= 0) {
@@ -556,7 +590,6 @@ function loop(now) {
       saveGame();
     }
   }
-  requestAnimationFrame(loop);
 }
 
 boot().catch((e) => {

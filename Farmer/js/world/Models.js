@@ -1511,9 +1511,23 @@ function makeSeeder() {
   return v;
 }
 
-/** 탈것 모델: { root, wheels: [{ pivot, r }], spinners: [Group], kind } */
+/** 농기계 크기 배율 — 밭 한 칸(1.5m, 칸 간격 1.7m)과 비슷하게 (원래 길이 트랙터 3.6m · 파종기 3.2m) */
+export const VEHICLE_SCALE = { tractor: 0.5, seeder: 0.55 };
+
+/**
+ * 탈것 모델: { root, wheels: [{ pivot, r }], spinners: [Group], kind, seatY }
+ * 원래 크기로 만든 뒤 VEHICLE_SCALE 만큼 줄인다 — 좌석 높이(seatY) · 바퀴 반지름도 함께 줄어든다
+ */
 export function makeVehicle(kind) {
-  return kind === 'seeder' ? makeSeeder() : makeTractor();
+  const v = kind === 'seeder' ? makeSeeder() : makeTractor();
+  const s = VEHICLE_SCALE[v.kind] ?? 0.5;
+  const outer = new THREE.Group();
+  v.root.scale.setScalar(s);
+  outer.add(v.root);
+  v.root = outer;
+  v.seatY = VEHICLE_SEAT_Y * s;
+  for (const w of v.wheels) w.r *= s;
+  return v;
 }
 
 // ═════════════════════════════════════════════════════════════

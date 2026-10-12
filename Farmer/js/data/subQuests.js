@@ -1,4 +1,4 @@
-// 주민 서브 퀘스트 — 메인 15개와 별개. req.prev: 먼저 끝내야 하는 퀘스트, req.hearts: 필요한 하트 수
+// 주민 서브 퀘스트 — 메인 15개와 별개. req.prev: 먼저 끝내야 하는 퀘스트, req.mainDone: 먼저 끝내야 하는 메인 퀘스트 수
 export const SUB_QUESTS = [
   {
     id: 'sub_grandma_1', giver: 'grandma', title: '할머니의 무 반찬', desc: '김 할머니에게 무 5개를 가져다드리자.',
@@ -8,7 +8,7 @@ export const SUB_QUESTS = [
     rewards: { items: [{ id: 'food_lunchbox', n: 3 }] },
   },
   {
-    id: 'sub_grandma_2', giver: 'grandma', title: '할머니표 김치찌개', desc: '감자·당근·토마토를 3개씩 가져다드리자.', req: { prev: 'sub_grandma_1', hearts: 3 },
+    id: 'sub_grandma_2', giver: 'grandma', title: '할머니표 김치찌개', desc: '감자·당근·토마토를 3개씩 가져다드리자.', req: { prev: 'sub_grandma_1' },
     offer: ['우리 강아지 주려고 특별한 찌개를 끓여 볼라는디…', '감자, 당근, 토마토 세 개씩만 구해 와 줘.'],
     done: ['맛있게 먹어! 그리고 이건 할미가 아끼던 비료여. 작물이 쑥쑥 클 겨.'],
     objectives: [
@@ -26,7 +26,7 @@ export const SUB_QUESTS = [
     rewards: { flags: ['deco_drawing'] },
   },
   {
-    id: 'sub_minji_2', giver: 'minji', title: '딸기 파티', desc: '민지에게 딸기 10개를 가져다주자.', req: { prev: 'sub_minji_1', hearts: 3 },
+    id: 'sub_minji_2', giver: 'minji', title: '딸기 파티', desc: '민지에게 딸기 10개를 가져다주자.', req: { prev: 'sub_minji_1' },
     offer: ['나 친구들이랑 딸기 파티 할 거야!', '딸기 열 개 있으면 좋겠다…'],
     done: ['우와아! 고마워! 이거 내가 만든 꽃 머리띠야. 꼭 써 줘!'],
     objectives: [{ kind: 'deliver', to: 'minji', item: 'crop_strawberry', n: 10 }],
@@ -40,7 +40,7 @@ export const SUB_QUESTS = [
     rewards: { clothes: ['cloth_flower_top'] },
   },
   {
-    id: 'sub_sua_2', giver: 'sua', title: '선배의 장사 비법', desc: '작물 30개를 판매하자.', req: { prev: 'sub_sua_1', hearts: 3 },
+    id: 'sub_sua_2', giver: 'sua', title: '선배의 장사 비법', desc: '작물 30개를 판매하자.', req: { prev: 'sub_sua_1' },
     offer: ['귀농 선배로서 하나 알려 줄게. 꾸준히 파는 게 제일 중요해.', '작물을 서른 개 팔고 나서 다시 와 봐.'],
     done: ['역시! 이 치마도 가져가. 블라우스랑 세트야.'],
     objectives: [{ kind: 'sellCount', count: 30 }],
@@ -80,7 +80,7 @@ export const SUB_QUESTS = [
     rewards: { items: [{ id: 'food_tea', n: 3 }] },
   },
   {
-    id: 'sub_fisher_2', giver: 'fisher', title: '구운 옥수수', desc: '오 씨에게 옥수수 5개를 가져다주자.', req: { prev: 'sub_fisher_1', hearts: 3 },
+    id: 'sub_fisher_2', giver: 'fisher', title: '구운 옥수수', desc: '오 씨에게 옥수수 5개를 가져다주자.', req: { prev: 'sub_fisher_1' },
     offer: ['낚시하면서 구운 옥수수를 먹으면 그만이지.', '옥수수 다섯 개만 가져다주겠나?'],
     done: ['고맙네! 내 낚싯대를 자네 집에 하나 두지. 약초차는 이제 상점에서도 팔라고 해 두겠네.'],
     objectives: [{ kind: 'deliver', to: 'fisher', item: 'crop_corn', n: 5 }],
@@ -94,7 +94,7 @@ export const SUB_QUESTS = [
     rewards: { clothes: ['cloth_smith_hat'] },
   },
   {
-    id: 'sub_smith_2', giver: 'smith', title: '명장의 길', desc: '장착한 모든 농기구를 +3 이상으로 강화하자.', req: { prev: 'sub_smith_1', hearts: 3 },
+    id: 'sub_smith_2', giver: 'smith', title: '명장의 길', desc: '장착한 모든 농기구를 +3 이상으로 강화하자.', req: { prev: 'sub_smith_1' },
     offer: ['쓰고 있는 도구를 전부 +3까지 올려 봐라.', '해내면… 내 앞치마를 물려주지.'],
     done: ['…넌 이제 진짜 농부다. 이 앞치마 가져가. 앞으로 강화 비용도 깎아 주마.'],
     objectives: [{ kind: 'enhance', level: 3, count: 3 }],

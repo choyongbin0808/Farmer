@@ -1,6 +1,7 @@
 import { G, FARM_MAX, HOTBAR_SIZE, SAVE_VERSION, BAG_AREAS, createNewState, newPlot, newBag, newHotbar } from './Game.js';
 import { GEAR, TOOLS, TOOL_ORDER, startingGear } from '../data/tools.js';
 import { getItem } from '../data/items.js';
+import { CROPS, plotGrowMinutes } from '../data/crops.js';
 import { bagAreaOf } from '../systems/InventorySystem.js';
 
 const KEY = 'farmer_save_v1';
@@ -45,6 +46,28 @@ function migrateFarm(data) {
     farm.grid = FARM_MAX;
   }
   farm.size = Math.min(farm.size, FARM_MAX);
+}
+
+/**
+ * 작물 성장이 '일' 단위(daysGrown)에서 '시간' 단위(grown, 게임 분)로 바뀌었다.
+ * 예전 성장 일수 표로 자란 비율을 구해, 같은 비율만큼 자란 것으로 옮긴다.
+ */
+const OLD_DAYS = { lettuce: 1, radish: 2, potato: 2, carrot: 2, tomato: 3, strawberry: 3, corn: 3, pumpkin: 4, watermelon: 4 };
+function migratePlots(data) {
+  for (const p of data.farm?.plots || []) {
+    if (!p) continue;
+    if (p.daysGrown === undefined) {
+      if (p.grown === undefined) p.grown = 0;
+      continue;
+    }
+    if (p.state === 'planted' && p.cropId && CROPS[p.cropId]) {
+      const days = p.seedling ? Math.max(1, Math.round((OLD_DAYS[p.cropId] ?? 3) / 3)) : (OLD_DAYS[p.cropId] ?? 3);
+      p.grown = Math.min(1, (p.daysGrown || 0) / days) * plotGrowMinutes(p);
+    } else {
+      p.grown = 0;
+    }
+    delete p.daysGrown;
+  }
 }
 
 /** 예전 세이브(도구 종류별 강화 단계 1~5)를 장비 시스템(state.gear)으로 옮긴다 */
@@ -190,6 +213,7 @@ export function loadGame() {
   try {
     const data = JSON.parse(raw);
     migrateFarm(data);
+    migratePlots(data);
     migrateTools(data);
     migrateBag(data);
     migrateBagAreas(data);

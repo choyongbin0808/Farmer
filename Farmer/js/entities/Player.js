@@ -188,7 +188,7 @@ export class Player {
     v.root.position.y = shake;
     v.root.rotation.x = -k * 0.04;
     // 팔을 앞으로 뻗어 핸들을 잡는다
-    this.pose({ a0x: -1.35, a1x: -1.35, in0: 0.2, in1: 0.2, l0x: -1.2, l1x: -1.2, bx: k * 0.08, by: VEHICLE_SEAT_Y - CHAR_SIT_HEIGHT + shake });
+    this.pose({ a0x: -1.35, a1x: -1.35, in0: 0.2, in1: 0.2, l0x: -1.2, l1x: -1.2, bx: k * 0.08, by: (v.seatY ?? VEHICLE_SEAT_Y) - CHAR_SIT_HEIGHT + shake });
   }
 
   /**
@@ -247,7 +247,8 @@ export class Player {
         this.work = null;
         workPose = null;
         if (!this.keepHeld) this.setHeld(null);
-        w.cb?.();
+        // 작업 완료 처리에서 오류가 나도 캐릭터 업데이트·게임 루프는 계속 돌도록
+        try { w.cb?.(); } catch (e) { console.error('[work]', e); }
       }
     } else if (canMove) {
       const f = (input.isDown('KeyW', 'ArrowUp') ? 1 : 0) - (input.isDown('KeyS', 'ArrowDown') ? 1 : 0);

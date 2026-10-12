@@ -1,10 +1,11 @@
-import { G, FARM_MAX, formatMoney } from '../core/Game.js';
+import { G, FARM_MAX, formatMoney, GAME_MIN_PER_SEC } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
-import { CROPS, stars, plotDays, seedlingDays } from '../data/crops.js';
+import { CROPS, stars, plotGrowSeconds, growSeconds, growText, josa } from '../data/crops.js';
 import { getItem } from '../data/items.js';
 import { InventorySystem } from '../systems/InventorySystem.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { itemIconHTML, toast } from './HUD.js';
+import { itemSvg } from './ItemIcons.js';
 import { harvestText } from '../data/tools.js';
 import { FarmSystem, EXPAND_COSTS } from '../systems/FarmSystem.js';
 import { StaminaSystem } from '../systems/StaminaSystem.js';
@@ -69,24 +70,25 @@ function renderInfo(body) {
   const c = CROPS[d.cropId];
   const s = G.state;
   const stage = plot.stage();
-  const days = plotDays(d);
-  const left = Math.max(0, days - d.daysGrown);
-  const pct = Math.round((Math.min(d.daysGrown, days) / days) * 100);
+  const total = plotGrowSeconds(d);
+  const grownSec = Math.min(total, (d.grown || 0) / GAME_MIN_PER_SEC);
+  const left = Math.max(0, total - grownSec);
+  const pct = Math.round((grownSec / total) * 100);
   const sickle = GearSystem.stats('sickle');
   const [hMin, hMax] = sickle.harvest;
+  const boosters = InventorySystem.count('special_growth');
   const income = hMin === hMax ? `${formatMoney(c.sellPrice * hMin)}원` : `${formatMoney(c.sellPrice * hMin)}~${formatMoney(c.sellPrice * hMax)}원`;
-  const readyDay = s.time.day + left;
 
   let when;
   if (stage === 3) when = '<b class="ok">지금 바로 수확할 수 있어요!</b>';
-  else if (d.watered) when = `<b>${readyDay}일차 아침</b> (${left}일 뒤)<small>매일 물을 주면 이때 다 자라요</small>`;
-  else when = `<b>${readyDay}일차 아침</b> (${left}일 뒤)<small>⚠️ 오늘 물을 줘야 이 날짜에 맞출 수 있어요</small>`;
+  else if (d.watered) when = `<b>약 ${growText(left)} 뒤</b><small>물을 준 오늘은 시간이 흐르는 만큼 자라요 (자는 동안에도)</small>`;
+  else when = `<b>${growText(left)} 더 자라야 해요</b><small>⚠️ 지금은 물이 말라서 멈춰 있어요 — 물을 주면 다시 자라요</small>`;
 
   const water = stage === 3
     ? '다 자랐어요'
     : d.watered
-      ? `💧 오늘 물을 줬어요${s.time.weather === 'rain' ? ' (비)' : ''} — 자고 일어나면 하루 자라요`
-      : '🏜️ 아직 물을 안 줬어요 — 물을 줘야 오늘 밤 자라요';
+      ? `💧 오늘 물을 줬어요${s.time.weather === 'rain' ? ' (비)' : ''} — 지금 자라는 중`
+      : '🏜️ 아직 물을 안 줬어요 — 물을 줘야 자라요';
 
   body.innerHTML = `
     <div class="crop-info">
@@ -96,19 +98,46 @@ function renderInfo(body) {
         <span class="ci-stage">${STAGE_NAMES[stage]}</span>
       </div>
       <div class="ci-bar"><div style="width:${pct}%"></div></div>
-      <div class="ci-bar-label">성장 ${Math.min(d.daysGrown, days)} / ${days}일 (${pct}%)</div>
+      <div class="ci-bar-label">성장 ${growText(grownSec)} / ${growText(total)} (${pct}%)</div>
+      <div class="ci-acts">
+        <button class="ci-act boost" data-act="boost" ${boosters && stage < 3 ? '' : 'disabled'}>
+          <span class="ci-act-ico">${itemSvg('hourglass')}</span>
+          <span class="ci-act-txt"><b>성장 촉진제</b><small>${stage === 3 ? '이미 다 자랐어요' : boosters ? `${boosters}개 있음 · 바로 다 자라요` : `없음 · 상점에서 ${getItem('special_growth').price}원`}</small></span>
+        </button>
+        <button class="ci-act plow" data-act="plow">
+          <span class="ci-act-ico">${itemSvg('plow')}</span>
+          <span class="ci-act-txt"><b>갈아엎기</b><small>작물을 없애고 다시 심어요</small></span>
+        </button>
+      </div>
       <div class="ci-grid">
-        <div><span>⏰ 다 자라는 날</span>${when}</div>
+        <div><span>⏰ 다 자라기까지</span>${when}</div>
         <div><span>💧 물 상태</span>${water}</div>
         <div><span>📅 심은 날</span>${d.plantedDay ? `${d.plantedDay}일차` : '-'}</div>
-        <div><span>🌱 총 성장 기간</span>${days}일 (물 준 날만 자라요)${d.seedling ? `<small>모종이라 씨앗(${c.days}일)보다 3배 빨라요</small>` : ''}</div>
+        <div><span>🌱 총 성장 시간</span>${growText(total)} (물 준 날만 자라요)${d.seedling ? `<small>모종이라 씨앗(${growText(growSeconds(d.cropId))})보다 3배 빨라요</small>` : ''}</div>
         <div><span>💰 판매가</span>개당 ${formatMoney(c.sellPrice)}원</div>
         <div><span>🧺 예상 수확</span>${harvestText(sickle.harvest)} · ${income}<small>${GearSystem.displayName(GearSystem.equippedId('sickle'))} 기준</small></div>
         <div><span>⚡ 심기 체력</span>${StaminaSystem.plantCost(d.cropId)} (기본 ${c.staminaCost})</div>
         <div><span>🛒 씨앗 가격</span>${formatMoney(c.seedPrice)}원</div>
       </div>
-      <div class="note">💡 하루는 잠을 자거나 새벽 2시가 되면 지나가요. 비 오는 날에는 물이 저절로 뿌려져요.</div>
+      <div class="note">💡 물을 준 날에는 시간이 흐르는 동안 계속 자라고, 밤에 자는 동안에도 자라요. 아침이 되면 물이 마르니 다시 줘야 해요. 비 오는 날에는 물이 저절로 뿌려져요.</div>
     </div>`;
+
+  body.querySelector('[data-act="boost"]').addEventListener('click', () => {
+    closeModal();
+    FarmSystem.useBooster(plot);
+  });
+  // 갈아엎기는 되돌릴 수 없으니 한 번 더 눌러야 실행
+  const plowBtn = body.querySelector('[data-act="plow"]');
+  plowBtn.addEventListener('click', () => {
+    if (!plowBtn.classList.contains('confirm')) {
+      plowBtn.classList.add('confirm');
+      plowBtn.querySelector('.ci-act-txt').innerHTML = `<b>정말 갈아엎을까요?</b><small>한 번 더 누르면 ${c.name}${josa(c.name, '이', '가')} 사라져요</small>`;
+      AudioManager.sfx('click');
+      return;
+    }
+    closeModal();
+    FarmSystem.plowUnder(plot);
+  });
 }
 
 // ───── 씨앗 고르기 (갈고 물 준 밭을 씨앗 없이 눌렀을 때) ─────
@@ -135,10 +164,10 @@ function renderSeedPicker(body) {
     <div class="shop-top"><span>🌱 이 밭에 무엇을 심을까요? <small>고른 씨앗은 손에 들려서, 다른 밭도 바로 눌러 심을 수 있어요</small></span></div>
     <div class="seed-grid seed-pick-grid">${seeds.map((e) => {
       const c = CROPS[e.item.cropId];
-      const days = e.item.seedling ? seedlingDays(e.item.cropId) : c.days;
+      const t = growText(growSeconds(e.item.cropId, e.item.seedling));
       return `<button class="seed-pick" data-id="${e.id}">
         ${itemIconHTML(e.id)}<b>${e.item.name}</b>
-        <small>${e.n}개 · ${days}일${e.item.seedling ? ' (모종)' : ''} · ⚡${StaminaSystem.plantCost(e.item.cropId)}</small>
+        <small>${e.n}개 · ${t}${e.item.seedling ? ' (모종)' : ''} · ⚡${StaminaSystem.plantCost(e.item.cropId)}</small>
       </button>`;
     }).join('')}</div>`;
   body.querySelectorAll('[data-id]').forEach((b) => b.addEventListener('click', () => {
@@ -174,7 +203,7 @@ export const FarmUI = {
 
   init() {
     for (const evt of ['money', 'farmExpand']) EventBus.on(evt, () => refreshModal('farmExpand'));
-    for (const evt of ['water', 'harvest']) EventBus.on(evt, () => refreshModal('cropInfo'));
+    for (const evt of ['water', 'harvest', 'grow', 'inventory']) EventBus.on(evt, () => refreshModal('cropInfo'));
     EventBus.on('newDay', () => { if (G.ui.modal === 'cropInfo') closeModal(true); });
   },
 };

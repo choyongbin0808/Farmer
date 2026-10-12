@@ -1,11 +1,21 @@
 import { MINE_ORIGIN, ENTRANCE_PROPS } from './mining.js';
+import { RANKS } from './ranks.js';
+import { G } from '../core/Game.js';
 
 const MX = MINE_ORIGIN.x, MZ = MINE_ORIGIN.z;
+
+/** 주인공이 마을 이장이 되면 박 이장은 부이장으로 물러난다 */
+export function chiefRetired() {
+  return (G.state?.rank ?? 0) >= RANKS.length - 1;
+}
 
 // pos: 기본 위치 [x, z], face: 바라보는 방향(라디안), look: 3D 모델 외형, zone: 'mine'이면 광산 안에 있음
 export const NPCS = {
   chief: {
-    name: '박 이장', role: '마을 이장', avatar: '👴', pos: [0, -14.6], face: 0,
+    // 이름 · 직책 · 대사는 주인공이 이장이 되면 부이장 것으로 바뀐다
+    get name() { return chiefRetired() ? '박 부이장' : '박 이장'; },
+    get role() { return chiefRetired() ? '부이장' : '마을 이장'; },
+    avatar: '👴', pos: [0, -14.6], face: 0,
     look: { skin: 0xf0c8a4, top: 0xa8805a, bottom: 0x6a5848, hair: 0xeeece6, hairStyle: 'bald', beard: 0xeeece6, glasses: true },
     greet: [
       '허허, 오늘도 부지런하구먼.',
@@ -17,18 +27,30 @@ export const NPCS = {
       '작물마다 자라는 시간이 다르니, 계획을 세워 심어 보게.',
       '밤이 깊으면 집에 가서 푹 자게. 체력이 있어야 농사도 짓지.',
     ],
+    // 부이장이 된 뒤의 대사
+    greetRetired: [
+      '오, 이장님! 오늘도 마을 한 바퀴 도시는 겐가? 허허.',
+      '이장님 덕분에 이 늙은이는 이제 마음 편히 부이장 노릇이나 한다네.',
+      '부이장 박 아무개, 이장님께 인사드립니다! 허허, 아직은 어색하구먼.',
+    ],
+    chatRetired: [
+      '마을 일로 어려운 게 있으면 언제든 이 부이장에게 말하게.',
+      '새 마을회관 책상은 이제 자네 자리일세. 앉아 보니 어떤가?',
+      '요즘은 이장 일 대신 밭에 앉아 해 지는 걸 보는 게 낙이라네.',
+    ],
   },
   shop: {
     name: '최 사장', role: '상점 주인', avatar: '🧑‍💼', pos: [-15.6, -4], face: Math.PI / 2,
     look: { skin: 0xeec09a, top: 0xf0b048, bottom: 0x4a5a78, hair: 0x2e2420, hairStyle: 'short', cap: 0xd8503e },
     greet: [
       '어서 오세요! 오늘도 좋은 씨앗 많이 들어왔어요.',
-      '싱싱한 작물은 언제든 사 드려요!',
+      '씨앗이든 도구든 필요한 건 다 있어요!',
       '장사는 신용이죠. 우리 가게는 가격이 늘 똑같답니다.',
     ],
     chat: [
       '비싼 작물일수록 심을 때 힘이 많이 든다더라고요.',
-      '수확한 작물은 창고로 바로 들어가니까, 여기서 바로 파시면 돼요.',
+      '수확한 작물은 창고로 바로 들어가요. 파는 것도 창고에서 바로 출하하시면 돼요.',
+      '약탕기나 육묘장을 사시면 댁 지하 작업실에 바로 설치해 드려요!',
     ],
   },
   smith: {
@@ -68,7 +90,7 @@ export const NPCS = {
     ],
     chat: [
       '어제 시냇물에서 반짝이는 돌을 주웠어!',
-      '이장 할아버지는 엄청 착해!',
+      '박 할아버지는 엄청 착해!',
     ],
   },
   sua: {
@@ -122,7 +144,7 @@ export const NPCS = {
       '먼지 조심하게. 허허.',
     ],
     chat: [
-      '광맥은 캐고 나도 시간이 지나면 여기저기서 조금씩 다시 솟아난다네.',
+      '광산은 2분쯤마다 통째로 다시 차오른다네. 그때 아래층에 있으면 승강기 타듯 입구로 올라오게 될 걸세.',
       '이 광산은 4층까지 있다네. 층이 올라갈수록 귀한 광석이 많고, 3층부터는 석탄이나 구리는 아예 안 나오지.',
       '단단한 광석은 좋은 곡괭이가 아니면 흠집도 안 나. 돌쇠한테 가 보게.',
       '우리 집사람이 보냈다고? 허허, 그 사람 잔소리는 광산까지 들린다네.',

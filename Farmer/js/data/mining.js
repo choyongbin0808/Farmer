@@ -1,5 +1,5 @@
 // 광산 — 농사에 지친 사람을 위한 쉬어 가는 콘텐츠. 벌이는 농사보다 적게 잡는다.
-// 광맥은 층 안 아무 데나 생기고, 게임 시간 REGEN_MIN 분마다 하나씩 다시 생긴다 (층마다 최대 MAX_ORES 개).
+// 광맥은 층 안 아무 데나 생기고, RESET_MIN 분마다 광산 전체의 빈 자리가 한꺼번에 다시 채워진다 (층마다 최대 MAX_ORES 개).
 // tier: 캐는 데 필요한 곡괭이 등급, hard: 캐는 시간 배율 (출현 확률은 층마다 FLOOR_LAYOUT.weights)
 export const ORES = {
   ore_coal:     { name: '석탄',      icon: '⚫', price: 5,   tier: 0, hard: 1.0, color: 0x2e2c2a, glow: 0x000000 },
@@ -30,20 +30,23 @@ export const FLOOR_GAP = 100;
 /** 한 층의 이동 범위 (로컬) — 44 x 32m */
 export const MINE_HALF = { x: 22, zMin: -17, zMax: 15 };
 
+/** 2층부터 있는 승강기 자리 (로컬) — 타면 바로 1층(입구)으로 올라간다 */
+const LIFT = [-14.5, 12.4];
+
 /**
  * 층별 배치 (로컬 좌표)
- * exit: 마을로 나가는 출구(1층만), up/down: 위·아래층 사다리, tint: 바닥·벽 색
+ * exit: 마을로 나가는 출구(1층만), up/down: 위·아래층 사다리, lift: 1층 직행 승강기(2층부터), tint: 바닥·벽 색
  * weights: 광맥 출현 가중치 — 광석 종류는 모든 층이 같고, 층이 올라갈수록(1층 → 4층) 좋은 광석 확률이 오른다.
  *          처음 광석인 석탄·구리는 3층부터 나오지 않는다.
  */
 export const FLOOR_LAYOUT = [
   { exit: [-22.3, 10], up: null, down: [19, -13], tint: 0x8a7462,
     weights: { ore_coal: 35, ore_copper: 32, ore_iron: 20, ore_silver: 9, ore_gold: 3, ore_amethyst: 1 } },
-  { up: [-20.4, 11], down: [19, -13], tint: 0x7e6a5c,
+  { up: [-20.4, 11], down: [19, -13], lift: LIFT, tint: 0x7e6a5c,
     weights: { ore_coal: 16, ore_copper: 20, ore_iron: 32, ore_silver: 20, ore_gold: 9, ore_amethyst: 3 } },
-  { up: [-20.4, 11], down: [19, -13], tint: 0x6e6460,
+  { up: [-20.4, 11], down: [19, -13], lift: LIFT, tint: 0x6e6460,
     weights: { ore_coal: 0, ore_copper: 0, ore_iron: 36, ore_silver: 34, ore_gold: 22, ore_amethyst: 8 } },
-  { up: [-20.4, 11], down: null, tint: 0x6a5c72,
+  { up: [-20.4, 11], down: null, lift: LIFT, tint: 0x6a5c72,
     weights: { ore_coal: 0, ore_copper: 0, ore_iron: 18, ore_silver: 34, ore_gold: 32, ore_amethyst: 16 } },
 ];
 
@@ -55,11 +58,13 @@ export const BEAM_HALF = 1.6;
 export const LAMPS = [[-21, -10, 0], [21, -10, Math.PI], [-21, 3, 0], [21, 3, Math.PI], [-10, -16.4, -Math.PI / 2], [10, -16.4, -Math.PI / 2]];
 
 /**
- * 광맥 생성 — 정해진 자리가 없고, 층 안 빈 땅 아무 데나 생긴다.
- * 층마다 최대 MAX_ORES 개까지, 게임 시간 REGEN_MIN 분마다 하나씩 새로 생긴다 (자는 동안·밖에 있는 동안에도 시간만큼).
+ * 광맥 생성 — 정해진 자리가 없고, 층 안 빈 땅 아무 데나 생긴다 (층마다 최대 MAX_ORES 개).
+ * 캔 광맥은 사라진 채로 있다가, RESET_MIN 분마다 광산 전체가 초기화되어
+ * 모든 층의 빈 자리가 한꺼번에 다시 채워진다 (밖에 있거나 자는 동안에도 시간은 흐른다).
  */
 export const MAX_ORES = 30;
-export const REGEN_MIN = 30;
+// 게임 시간 600분 = 실제 약 2분 (1초 = 게임 5분)
+export const RESET_MIN = 600;
 /** 광맥끼리 · 플레이어와 떨어져야 하는 거리 */
 const ORE_GAP = 2.6;
 
@@ -73,6 +78,7 @@ function keepOuts(floor) {
   for (const [x, z] of LAMPS) keep.push([x, z, 1.6]);
   if (L.up) keep.push([...L.up, 3.6]);
   if (L.down) keep.push([...L.down, 3.6]);
+  if (L.lift) keep.push([...L.lift, 3.2]);
   if (L.exit) keep.push([L.exit[0] + 2, L.exit[1], 4.2]);
   if (floor === 0) for (const [x, z] of Object.values(ENTRANCE_PROPS)) keep.push([x, z, 3.2]);
   keepCache[floor] = keep;

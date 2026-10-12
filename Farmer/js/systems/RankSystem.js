@@ -17,6 +17,8 @@ export const RankSystem = {
       G.state.rank = r;
       AudioManager.sfx('rank');
       banner('🏅 직책 상승!', `${RANKS[r].name} · 해금: ${RANKS[r].unlock}`);
+      // 마을 이장이 되면 박 이장은 부이장으로 물러난다
+      if (r === RANKS.length - 1) banner('🤝 박 이장 → 박 부이장', '이제부터 박 할아버지가 부이장으로 새 이장님을 도와요');
       EventBus.emit('rank');
     }
   },

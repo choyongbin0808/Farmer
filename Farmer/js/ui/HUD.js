@@ -1,7 +1,11 @@
 import { G, formatMoney, HOTBAR_SIZE } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { getItem } from '../data/items.js';
+import { itemSvg } from './ItemIcons.js';
 import { WEATHERS } from '../world/Weather.js';
+import { ROOMS } from '../world/Interiors.js';
+import { MiningSystem } from '../systems/MiningSystem.js';
+import { MAX_ORES } from '../data/mining.js';
 import { StaminaSystem } from '../systems/StaminaSystem.js';
 import { GearSystem } from '../systems/GearSystem.js';
 import { OutfitSystem } from '../systems/OutfitSystem.js';
@@ -24,6 +28,8 @@ function setText(id, v) {
 export function itemIconHTML(id) {
   const it = getItem(id);
   if (!it) return '';
+  // 직접 그린 아이콘이 있으면 그것으로 (성장 촉진제 모래시계 등)
+  if (it.svg) return `<span class="ico">${itemSvg(it.svg)}</span>`;
   if (it.type === 'seed') return `<span class="ico">${it.icon}<span class="sub-ico">${it.subIcon}</span></span>`;
   // 도구는 장착한 장비 아이콘 (트랙터 🚜 등)
   if (it.type === 'tool' && G.state) return `<span class="ico">${GearSystem.equipped(it.toolKind).icon}</span>`;
@@ -140,11 +146,17 @@ export function updateHUD() {
   setText('hud-clock', TimeSystem.clock());
   // 광산 안에서는 날씨 대신 지금 층
   if (s.player.zone === 'mine') {
+    // 광산 안: 지금 층 · 남은 광맥 · 광산 전체가 초기화되기까지 남은 시간 (늘 표시)
     const f = s.player.mineFloor ?? 0;
-    setText('hud-weather', `⛏️ 광산 ${f + 1}층${f === 0 ? ' (입구)' : ''}`);
+    const st = s.mine.floors?.[f];
+    const left = MiningSystem.resetLeftSeconds();
+    const time = left >= 60 ? `${Math.floor(left / 60)}분 ${String(left % 60).padStart(2, '0')}초` : `${left}초`;
+    setText('hud-weather', `⛏️ 광산 ${f + 1}층${f === 0 ? ' (입구)' : ''} · 광맥 ${st?.ores.length ?? 0}/${MAX_ORES} · 🔄 초기화까지 ${time}`);
   } else {
     const w = WEATHERS[s.time.weather];
-    setText('hud-weather', `${w.icon} ${w.name}`);
+    // 집 · 마을회관 안이면 장소도 함께
+    const room = ROOMS[s.player.zone];
+    setText('hud-weather', room ? `${room.icon} ${room.name} · ${w.icon}` : `${w.icon} ${w.name}`);
   }
 }
 

@@ -1,16 +1,29 @@
 import { G } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { FACILITIES, MAX_BATCH, BREW_RECIPE, BREW_OUTPUT } from '../data/facilities.js';
-import { CROPS, seedlingDays } from '../data/crops.js';
+import { CROPS, growSeconds, growText } from '../data/crops.js';
 import { getItem } from '../data/items.js';
-import { FacilitySystem } from '../systems/FacilitySystem.js';
+import { FacilitySystem, durationText } from '../systems/FacilitySystem.js';
 import { InventorySystem } from '../systems/InventorySystem.js';
+import { StorageSystem } from '../systems/StorageSystem.js';
+import { SoilBoxSystem, SOIL_ID } from '../systems/SoilBoxSystem.js';
 import { openModal, refreshModal, closeModal } from './Panels.js';
 import { itemIconHTML } from './HUD.js';
 
 let index = -1;
 let qty = 1;
 let seedId = null;
+
+/** 재료가 어디에 얼마나 있는지: 가방 · 창고 · (일반 흙) 지하 흙 상자 — 제작에는 모두 쓰인다 */
+function whereHTML(id) {
+  const parts = [];
+  const bag = InventorySystem.count(id);
+  const store = StorageSystem.count(id);
+  if (id === SOIL_ID) parts.push(`📦 흙 상자 ${SoilBoxSystem.total()}`);
+  parts.push(`🎒 가방 ${bag}`);
+  if (store || id !== SOIL_ID) parts.push(`🏠 창고 ${store}`);
+  return parts.join(' · ');
+}
 
 function qtyHTML(max) {
   qty = Math.max(1, Math.min(qty, max || 1));
@@ -34,7 +47,7 @@ function jobHTML(i) {
     <div class="ci-bar"><div style="width:${pct}%"></div></div>
     ${st === 'done'
       ? '<button class="btn primary big" data-act="collect">꺼내기</button>'
-      : '<div class="note">⏳ 게임 시간이 흐르면 완성돼요. 다른 일을 하다 오거나, 자고 일어나도 돼요.</div>'}
+      : '<div class="note">⏳ 시간이 지나면 완성돼요 (창을 열어 둔 동안은 멈춰요). 다른 일을 하다 오거나, 자고 일어나도 돼요.</div>'}
   </div>`;
 }
 
@@ -43,14 +56,14 @@ function brewerHTML(i) {
   const mats = Object.entries(BREW_RECIPE).map(([id, need]) => {
     const have = InventorySystem.countAll(id);
     const ok = have >= need * Math.max(1, qty);
-    return `<div class="mat ${ok ? '' : 'lack'}">${itemIconHTML(id)}<b>${getItem(id).name}</b><small>${need * Math.max(1, qty)}개 필요 · 보유 ${have}</small></div>`;
+    return `<div class="mat ${ok ? '' : 'lack'}">${itemIconHTML(id)}<b>${getItem(id).name}</b><small>${need * Math.max(1, qty)}개 필요 · 모두 ${have}개</small><small class="where">${whereHTML(id)}</small></div>`;
   }).join('<span class="plus">+</span>');
   return `
     <div class="recipe">${mats}<span class="plus">→</span>
       <div class="mat out">${itemIconHTML(BREW_OUTPUT)}<b>${getItem(BREW_OUTPUT).name}</b><small>${Math.max(1, qty)}개</small></div></div>
     ${qtyHTML(max)}
-    <button class="btn primary big" data-act="brew" ${max ? '' : 'disabled'}>🍲 달이기 시작 (${FACILITIES.brewer.minutes * Math.max(1, qty)}분)</button>
-    <div class="note">💡 일반 흙은 상점, 타우린(물고기)·키토산(게)은 오 씨에게 잡은 고기를 넘기면 받아요.</div>`;
+    <button class="btn primary big" data-act="brew" ${max ? '' : 'disabled'}>🍲 달이기 시작 (${durationText(FacilitySystem.jobSeconds('brewer', qty))} · 1개당 ${FACILITIES.brewer.seconds}초)</button>
+    <div class="note">💡 재료는 가방 · 창고 · 지하 흙 상자에 있는 것을 모두 써요. 일반 흙은 상점에서 사면 흙 상자로 바로 들어오고, 타우린(물고기)·키토산(게)은 오 씨에게 잡은 고기를 넘기면 받아요.</div>`;
 }
 
 function nurseryHTML() {
@@ -61,17 +74,18 @@ function nurseryHTML() {
   const list = seeds.length
     ? seeds.map((s) => {
       const c = CROPS[s.cropId];
-      return `<button class="seed-pick ${s.id === seedId ? 'on' : ''}" data-seed="${s.id}">${itemIconHTML(s.id)}<b>${c.name}</b><small>${s.n}개 · ${c.days}일 → ${seedlingDays(s.cropId)}일</small></button>`;
+      const store = StorageSystem.count(s.id);
+      return `<button class="seed-pick ${s.id === seedId ? 'on' : ''}" data-seed="${s.id}">${itemIconHTML(s.id)}<b>${c.name}</b><small>${s.n}개${store ? ` (창고 ${store})` : ''} · ${growText(c.grow)} → ${growText(growSeconds(s.cropId, true))}</small></button>`;
     }).join('')
-    : '<div class="q-empty">가방에 씨앗이 없어요. 상점에서 씨앗을 사 오세요.</div>';
+    : '<div class="q-empty">가방·창고에 씨앗이 없어요. 상점에서 씨앗을 사 오세요.</div>';
   const c = seedId && CROPS[getItem(seedId).cropId];
   return `
     <div class="fac-sub">① 모종으로 키울 씨앗 고르기</div>
     <div class="seed-grid">${list}</div>
-    <div class="fac-sub">② 토양 흙과 함께 심기 <small>보유 토양 흙 ${soil}개 (씨앗 1개 + 토양 흙 1개 = 모종 1개)</small></div>
+    <div class="fac-sub">② 토양 흙과 함께 심기 <small>토양 흙 모두 ${soil}개 (${whereHTML('soil_rich')}) · 씨앗 1개 + 토양 흙 1개 = 모종 1개</small></div>
     ${qtyHTML(max)}
-    <button class="btn primary big" data-act="nursery" ${max ? '' : 'disabled'}>🌱 ${c ? `${c.name} 모종` : '모종'} 키우기 (${FACILITIES.nursery.minutes * Math.max(1, qty)}분)</button>
-    <div class="note">🪴 모종은 밭에 씨앗처럼 심어요. 자라는 데 걸리는 날이 <b>3분의 1</b>로 줄어요 (예: 수박 10일 → 3일).${soil ? '' : '<br>⚠ 토양 흙은 약탕기에서 만들어요.'}</div>`;
+    <button class="btn primary big" data-act="nursery" ${max ? '' : 'disabled'}>🌱 ${c ? `${c.name} 모종` : '모종'} 키우기 (${durationText(FacilitySystem.jobSeconds('nursery', qty))} · 1개당 ${FACILITIES.nursery.seconds}초)</button>
+    <div class="note">🪴 모종은 밭에 씨앗처럼 심어요. 자라는 시간이 <b>3분의 1</b>로 줄어요 (예: 수박 ${growText(CROPS.watermelon.grow)} → ${growText(growSeconds('watermelon', true))}).${soil ? '' : '<br>⚠ 토양 흙은 약탕기에서 만들어요.'}</div>`;
 }
 
 function render(body) {
@@ -86,9 +100,7 @@ function render(body) {
     <div class="shop-top">${def.icon} ${def.desc}</div>
     ${busy ? jobHTML(index) : f.kind === 'brewer' ? brewerHTML(index) : nurseryHTML()}
     <div class="fac-foot">
-      <button class="btn small" data-act="move">📐 위치 옮기기</button>
-      <button class="btn small" data-act="store" ${busy ? 'disabled' : ''}>📦 거둬들이기</button>
-      <small>한 번에 최대 ${MAX_BATCH}개까지 맡길 수 있어요</small>
+      <small>🛠️ 지하 작업실 ${f.slot + 1}번 자리 · 한 번에 최대 ${MAX_BATCH}개까지 맡길 수 있어요</small>
     </div>`;
   body.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => { qty = Number(b.dataset.q); refreshModal('facility'); }));
   body.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => { qty += Number(b.dataset.step); refreshModal('facility'); }));
@@ -96,14 +108,6 @@ function render(body) {
   body.querySelector('[data-act="brew"]')?.addEventListener('click', () => FacilitySystem.startBrew(index, qty));
   body.querySelector('[data-act="nursery"]')?.addEventListener('click', () => FacilitySystem.startNursery(index, seedId, qty));
   body.querySelector('[data-act="collect"]')?.addEventListener('click', () => FacilitySystem.collect(index));
-  body.querySelector('[data-act="move"]').addEventListener('click', () => {
-    const i = index;
-    closeModal();
-    FacilitySystem.startPlacement(f.kind, i);
-  });
-  body.querySelector('[data-act="store"]').addEventListener('click', () => {
-    if (FacilitySystem.store(index)) closeModal();
-  });
 }
 
 export const FacilityUI = {
@@ -115,6 +119,6 @@ export const FacilityUI = {
     openModal('facility', `${def.icon} ${def.name}`, render, { wide: true });
   },
   init() {
-    for (const evt of ['facility', 'inventory', 'storage']) EventBus.on(evt, () => refreshModal('facility'));
+    for (const evt of ['facility', 'inventory', 'storage', 'soil']) EventBus.on(evt, () => refreshModal('facility'));
   },
 };

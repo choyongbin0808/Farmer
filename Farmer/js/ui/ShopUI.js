@@ -1,6 +1,6 @@
 import { G, formatMoney } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
-import { stars } from '../data/crops.js';
+import { stars, growText } from '../data/crops.js';
 import { SLOT_NAMES, SETS } from '../data/clothes.js';
 import { TOOLS, TOOL_ORDER, gearStats, statsText } from '../data/tools.js';
 import { ShopSystem } from '../systems/ShopSystem.js';
@@ -12,11 +12,14 @@ import { AudioManager } from '../core/AudioManager.js';
 import { FACILITIES, FACILITY_ORDER } from '../data/facilities.js';
 import { getItem } from '../data/items.js';
 import { FacilitySystem } from '../systems/FacilitySystem.js';
+import { SoilBoxSystem } from '../systems/SoilBoxSystem.js';
 import { openModal, refreshModal, closeModal, tabsHTML, bindTabs } from './Panels.js';
 import { toast } from './HUD.js';
 import { gearIconSVG } from './GearIcons.js';
+import { itemSvg } from './ItemIcons.js';
 
-const TABS = [['seed', '🌱 씨앗 구매'], ['goods', '🍞 음식·잡화·옷 구매'], ['gear', '🔧 장비 구매'], ['facility', '🏡 시설·흙'], ['sell', '💰 작물 판매']];
+// 작물 판매는 창고에서만 (StorageUI)
+const TABS = [['seed', '🌱 씨앗 구매'], ['goods', '🍞 음식·잡화·옷 구매'], ['gear', '🔧 장비 구매'], ['facility', '🏡 시설·흙']];
 let tab = 'seed';
 let gearKind = 'hoe';
 
@@ -39,7 +42,7 @@ function seedTab() {
       <span class="ico big">🌱<span class="sub-ico">${c.icon}</span></span>
       <div class="info">
         <b>${c.name} 씨앗</b> <span class="stars">${stars(c.grade)}</span>
-        <small>${c.seedPrice}원 · 성장 ${c.days}일 · 판매가 ${c.sellPrice}원 · <span class="stam">⚡ 심기 체력 ${StaminaSystem.plantCost(e.cropId)}</span></small>
+        <small>${c.seedPrice}원 · 성장 ${growText(c.grow)} · 판매가 ${c.sellPrice}원 · <span class="stam">⚡ 심기 체력 ${StaminaSystem.plantCost(e.cropId)}</span></small>
         <small class="have">가방에 ${InventorySystem.count(e.itemId)}개</small>
       </div>
       <div class="qty">${qtyButtons(e.itemId)}</div>
@@ -63,7 +66,7 @@ function goodsTab() {
     }
     const effect = it.type === 'special' ? it.desc : `먹으면 체력 +${it.heal}`;
     return `<div class="shop-row">
-      <span class="ico big">${it.icon}</span>
+      <span class="ico big">${it.svg ? itemSvg(it.svg) : it.icon}</span>
       <div class="info"><b>${it.name}</b> <small>${it.price}원 · ${effect}</small><small class="have">가방에 ${InventorySystem.count(e.itemId)}개</small></div>
       <div class="qty">${qtyButtons(e.itemId)}</div>
     </div>`;
@@ -98,78 +101,44 @@ function gearTab() {
 function facilityTab() {
   const money = G.state.player.money;
   const soil = getItem('soil_plain');
+  const full = SoilBoxSystem.free() <= 0;
   const soilRow = `<div class="shop-row">
     <span class="ico big">${soil.icon}</span>
-    <div class="info"><b>${soil.name}</b> <small>${soil.price}원 · ${soil.desc}</small><small class="have">가방에 ${InventorySystem.count('soil_plain')}개</small></div>
-    <div class="qty">${qtyButtons('soil_plain')}</div>
+    <div class="info"><b>${soil.name}</b> <small>${soil.price}원 · ${soil.desc}</small>
+      <small class="have">📦 지하 흙 상자 <b>${SoilBoxSystem.total()} / ${SoilBoxSystem.capacity()}</b> (사면 상자로 바로 들어가요)</small></div>
+    <div class="qty">${full ? '<span class="tag">상자가 가득 찼어요</span>' : qtyButtons('soil_plain')}</div>
   </div>`;
   const rows = FACILITY_ORDER.map((kind) => {
     const f = FACILITIES[kind];
     const owned = FacilitySystem.ownedCount(kind);
-    const stock = FacilitySystem.stockCount(kind);
-    const placed = owned - stock;
     const full = owned >= f.max;
     return `<div class="shop-row">
       <span class="ico big">${f.icon}</span>
-      <div class="info"><b>${f.name}</b> <span class="tag">${f.w}×${f.d}m</span>
+      <div class="info"><b>${f.name}</b> <span class="tag">${'■'.repeat(owned)}${'□'.repeat(f.max - owned)}</span>
         <small>${f.desc}</small>
-        <small>${formatMoney(f.price)}원 · 보유 ${owned}/${f.max} (배치 ${placed} · 가방 ${stock})</small></div>
+        <small>${formatMoney(f.price)}원 · 지하 작업실에 ${owned}/${f.max}개 설치됨</small></div>
       <div class="qty">
-        ${stock ? `<button class="btn small primary" data-place="${kind}">📐 배치하기</button>` : ''}
-        <button class="btn small ${stock ? '' : 'primary'}" data-fac="${kind}" ${full || money < f.price ? 'disabled' : ''}>${full ? '최대 보유' : `구매 ${formatMoney(f.price)}원`}</button>
+        <button class="btn small primary" data-fac="${kind}" ${full || money < f.price ? 'disabled' : ''}>${full ? '자리가 꽉 찼어요' : `구매·설치 ${formatMoney(f.price)}원`}</button>
       </div>
     </div>`;
   }).join('');
   return `<div class="shop-list scroll">${soilRow}${rows}
-    <div class="note">🏡 시설은 사서 <b>원하는 빈 땅에 직접 놓아요</b> (길·밭·광장·건물 입구 위는 안 돼요). 놓은 시설을 누르면 사용하거나 위치를 옮길 수 있어요.<br>
+    <div class="note">🏡 시설을 사면 <b>우리 집 지하 작업실</b>의 빈 자리에 바로 설치돼요 (종류별 3칸). 집 안의 계단으로 내려가서 사용해요.<br>
     🍲 약탕기: 일반 흙 1 + 타우린 3 + 키토산 1 → 토양 흙 1 · 🏡 육묘장: 씨앗 1 + 토양 흙 1 → 모종 1 (3배 빨리 자람)</div></div>`;
 }
 
-function sellTab() {
-  const list = ShopSystem.sellableCrops();
-  const total = list.reduce((s, e) => s + e.crop.sellPrice * e.n, 0);
-  if (!list.length) return '<div class="shop-list empty">팔 수 있는 작물이 없어요.<br>수확한 작물은 창고로 들어가고, 여기서 바로 팔 수 있어요.</div>';
-  return `
-    <div class="sell-head">창고 + 가방 작물 <b>${list.reduce((s, e) => s + e.n, 0)}개</b> · 모두 팔면 <b>${formatMoney(total)}원</b>
-      <button class="btn primary" data-act="sellAll">모두 판매</button></div>
-    <div class="shop-list scroll">${list.map((e) => `
-      <div class="shop-row">
-        <span class="ico big">${e.crop.icon}</span>
-        <div class="info"><b>${e.crop.name}</b> <small>개당 ${e.crop.sellPrice}원 · 보유 ${e.n}개 (창고 ${StorageSystem.count(e.id)} · 가방 ${InventorySystem.count(e.id)})</small></div>
-        <div class="qty">
-          <button class="btn small" data-sell="${e.cropId}" data-n="1">1개</button>
-          <button class="btn small" data-sell="${e.cropId}" data-n="10">10개</button>
-          <button class="btn small primary" data-sell="${e.cropId}" data-n="${e.n}">전부 (${formatMoney(e.crop.sellPrice * e.n)}원)</button>
-        </div>
-      </div>`).join('')}</div>`;
-}
-
 function render(body) {
+  if (!TABS.some(([id]) => id === tab)) tab = 'seed';
   body.innerHTML = `
-    <div class="shop-top">🧑‍💼 최 사장: "필요한 거 있으면 말씀만 하세요!" <span class="money">💰 ${formatMoney(G.state.player.money)}원</span></div>
+    <div class="shop-top"><span>🧑‍💼 최 사장: "필요한 거 있으면 말씀만 하세요! 작물 판매는 창고에서 하시면 돼요."</span> <span class="money">💰 ${formatMoney(G.state.player.money)}원</span></div>
     ${tabsHTML(TABS, tab)}
-    ${tab === 'seed' ? seedTab() : tab === 'goods' ? goodsTab() : tab === 'gear' ? gearTab() : tab === 'facility' ? facilityTab() : sellTab()}`;
+    ${tab === 'seed' ? seedTab() : tab === 'goods' ? goodsTab() : tab === 'gear' ? gearTab() : facilityTab()}`;
   bindTabs(body, (t) => { tab = t; refreshModal('shop'); });
   body.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { gearKind = b.dataset.kind; refreshModal('shop'); }));
   body.querySelectorAll('[data-buy]').forEach((b) => b.addEventListener('click', () => ShopSystem.buy(b.dataset.buy, Number(b.dataset.n))));
   body.querySelectorAll('[data-cloth]').forEach((b) => b.addEventListener('click', () => ShopSystem.buyCloth(b.dataset.cloth)));
   body.querySelectorAll('[data-gear]').forEach((b) => b.addEventListener('click', () => ShopSystem.buyGear(b.dataset.gear)));
-  body.querySelectorAll('[data-fac]').forEach((b) => b.addEventListener('click', () => {
-    const kind = b.dataset.fac;
-    if (FacilitySystem.buy(kind)) toast(`${FACILITIES[kind].icon} ${FACILITIES[kind].name}을(를) 샀어요! 가방 '시설' 탭에 있어요 — '배치하기'로 원하는 곳에 놓아요`, 'good');
-  }));
-  body.querySelectorAll('[data-place]').forEach((b) => b.addEventListener('click', () => {
-    closeModal();
-    FacilitySystem.startPlacement(b.dataset.place);
-  }));
-  body.querySelectorAll('[data-sell]').forEach((b) => b.addEventListener('click', () => {
-    const money = ShopSystem.sell(b.dataset.sell, Number(b.dataset.n));
-    if (money) {
-      AudioManager.sfx('coin');
-      toast(`+${formatMoney(money)}원`, 'good');
-    }
-  }));
-  body.querySelector('[data-act="sellAll"]')?.addEventListener('click', () => ShopSystem.sellAll());
+  body.querySelectorAll('[data-fac]').forEach((b) => b.addEventListener('click', () => FacilitySystem.buy(b.dataset.fac)));
 }
 
 export const ShopUI = {
@@ -177,6 +146,6 @@ export const ShopUI = {
     openModal('shop', '🛒 상점', render, { wide: true });
   },
   init() {
-    for (const evt of ['money', 'inventory', 'storage', 'outfit', 'gear', 'rank', 'facility']) EventBus.on(evt, () => refreshModal('shop'));
+    for (const evt of ['money', 'inventory', 'storage', 'outfit', 'gear', 'rank', 'facility', 'soil']) EventBus.on(evt, () => refreshModal('shop'));
   },
 };

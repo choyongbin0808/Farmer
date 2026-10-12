@@ -9,7 +9,6 @@ let camera;
 const plotIcons = [];
 const npcTags = {};
 const floats = [];
-let beacon;
 let arrow;
 let gauge;
 let gaugeFill;
@@ -45,15 +44,8 @@ export function initMarkers(scene, cam, handlers) {
     el.className = 'mk npc-tag';
     el.innerHTML = `<div class="bubble hidden"></div><div class="nm">${NPCS[id].name}</div>`;
     root.appendChild(el);
-    npcTags[id] = { el, bubble: el.querySelector('.bubble'), last: '' };
+    npcTags[id] = { el, bubble: el.querySelector('.bubble'), nm: el.querySelector('.nm'), name: NPCS[id].name, last: '' };
   }
-
-  const geo = new THREE.CylinderGeometry(0.6, 0.6, 30, 16, 1, true);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xd8b878, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
-  beacon = new THREE.Mesh(geo, mat);
-  beacon.position.y = 15;
-  beacon.visible = false;
-  scene.add(beacon);
 
   arrow = document.getElementById('edge-arrow');
 
@@ -129,7 +121,6 @@ export function updateMarkers(dt, t, playerPos, visible) {
   root.classList.toggle('hidden', !visible);
   updateDynTags(visible);
   if (!visible) {
-    beacon.visible = false;
     arrow.classList.add('hidden');
     return;
   }
@@ -160,6 +151,8 @@ export function updateMarkers(dt, t, playerPos, visible) {
       tag.bubble.classList.toggle('quest', icon === '✅');
       tag.bubble.classList.toggle('progress', icon === '❗');
     }
+    // 이름이 바뀔 수 있다 (주인공이 이장이 되면 박 이장 → 박 부이장)
+    if (tag.name !== NPCS[id].name) tag.nm.textContent = tag.name = NPCS[id].name;
     const showName = d < 14 || !!qIcon;
     // 다른 구역이거나, 광산 아래층에 있을 때 1층의 광산 사람들
     const away = (NPCS[id].zone ?? 'village') !== currentZone() || (NPCS[id].zone === 'mine' && currentMineFloor() !== 0);
@@ -186,14 +179,10 @@ export function updateMarkers(dt, t, playerPos, visible) {
   const q = G.mode === 'play' ? QuestSystem.tracked() : null;
   const tgt = q && QuestSystem.target(q);
   if (!tgt) {
-    beacon.visible = false;
     arrow.classList.add('hidden');
     return;
   }
-  beacon.visible = true;
-  beacon.position.x = tgt.x;
-  beacon.position.z = tgt.z;
-  beacon.material.opacity = 0.2 + Math.sin(t * 3) * 0.08;
+  // 빛기둥 없이: 주민은 머리 위 ❗ · ✅, 그 밖의 목표(밭 · 창고 등)는 화면 가장자리 화살표만
   const dist = Math.hypot(tgt.x - playerPos.x, tgt.z - playerPos.z);
   const p = project(tgt.x, 1.5, tgt.z);
   const W = window.innerWidth, H = window.innerHeight, m = 60;

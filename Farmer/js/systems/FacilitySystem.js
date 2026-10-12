@@ -1,73 +1,64 @@
-import * as THREE from 'three';
-import { G, absMinutes, currentZone } from '../core/Game.js';
+import { G, absMinutes, currentZone, GAME_MIN_PER_SEC } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { saveGame } from '../core/SaveManager.js';
 import { FACILITIES, MAX_BATCH, BREW_RECIPE, BREW_OUTPUT } from '../data/facilities.js';
 import { CROPS } from '../data/crops.js';
-import { NPCS } from '../data/npcs.js';
 import { getItem } from '../data/items.js';
 import { InventorySystem } from './InventorySystem.js';
-import { interactables, facilityColliders, placementBlocked, BUILDINGS, FARM_SIGN_POS, MINE_DOOR } from '../world/World.js';
+import { StorageSystem } from './StorageSystem.js';
+import { SoilBoxSystem, SOIL_ID } from './SoilBoxSystem.js';
+import { interactables, facilityColliders } from '../world/World.js';
+import { cellarSlot, updateCellarSlots, CELLAR_SLOT_COUNT } from '../world/Interiors.js';
 import { makeBrewer, makeNursery } from '../world/ExtraModels.js';
 import { burst, sparkle } from '../world/Effects.js';
 import { addTagSource } from '../ui/WorldMarkers.js';
-import { toast, setHint } from '../ui/HUD.js';
+import { toast } from '../ui/HUD.js';
 
 /**
- * 직접 배치하는 시설 (약탕기 · 육묘장)
- * state.facilities[i] = { kind, x, z, rot(0~3, 90도 단위), job: { out, n, start, doneAt } | null }
- * 사 두고 아직 배치하지 않은 시설은 가방 '시설' 칸의 아이템(fac_brewer · fac_nursery)
+ * 시설 (약탕기 · 육묘장) — 우리 집 지하 작업실의 정해진 자리에 놓인다.
+ * 상점에서 사면 빈 자리에 바로 설치된다 (종류별 3칸).
+ * state.facilities[i] = { kind, slot, x, z, rot, job: { out, n, start, doneAt } | null }
  */
 
 let scene = null;
-const built = []; // state.facilities 와 같은 순서: { group, collider }
+const built = [];
+
+/** 초 → '20초' · '1분 40초' */
+export function durationText(sec) {
+  const s = Math.max(0, Math.ceil(sec));
+  if (s < 60) return `${s}초`;
+  return `${Math.floor(s / 60)}분${s % 60 ? ` ${s % 60}초` : ''}`;
+} // state.facilities 와 같은 순서: { group, collider }
 
 function makeModel(kind) {
   return kind === 'brewer' ? makeBrewer() : makeNursery();
 }
 
-/** 90도 단위 회전에 따른 바닥 크기 */
-function footprint(kind, rot) {
+function rectOf(kind, x, z) {
   const f = FACILITIES[kind];
-  return rot % 2 ? { w: f.d, d: f.w } : { w: f.w, d: f.d };
+  return { minX: x - f.w / 2, maxX: x + f.w / 2, minZ: z - f.d / 2, maxZ: z + f.d / 2 };
 }
 
-function rectOf(kind, x, z, rot) {
-  const { w, d } = footprint(kind, rot);
-  return { minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 };
+/** 종류별 비어 있는 첫 자리 (없으면 -1) */
+function freeSlot(kind) {
+  const used = new Set(G.state.facilities.filter((f) => f.kind === kind).map((f) => f.slot));
+  for (let i = 0; i < CELLAR_SLOT_COUNT[kind]; i++) if (!used.has(i)) return i;
+  return -1;
 }
 
-/** 비워 둬야 하는 곳: 마을 주민 자리, 건물 출입구, 밭 팻말, 광산 입구 */
-function keepClear() {
-  const pts = Object.entries(NPCS).filter(([, n]) => !n.zone).map(([, n]) => ({ x: n.pos[0], z: n.pos[1] }));
-  for (const b of Object.values(BUILDINGS)) pts.push({ x: b.ix, z: b.iz });
-  pts.push(FARM_SIGN_POS, MINE_DOOR);
-  return pts;
-}
-
-/** 배치 미리보기용 반투명 재질 */
-function ghostify(group) {
-  group.traverse((o) => {
-    if (o.isMesh) {
-      o.material = o.material.clone();
-      o.material.transparent = true;
-      o.material.opacity = Math.min(o.material.opacity, 0.55);
-      o.material.depthWrite = false;
-      o.castShadow = false;
-    } else if (o.isSprite) {
-      o.visible = false;
-    }
-  });
+function install(kind, slot, job = null) {
+  const p = cellarSlot(kind, slot);
+  const f = { kind, slot, x: p.x, z: p.z, rot: 0, job };
+  G.state.facilities.push(f);
+  return f;
 }
 
 export const FacilitySystem = {
-  placing: null,
-
   init(s) {
     scene = s;
     addTagSource(() => {
-      if (currentZone() !== 'village' || !G.state) return [];
+      if (currentZone() !== 'cellar' || !G.state) return [];
       const out = [];
       G.state.facilities.forEach((f, i) => {
         const st = this.status(i);
@@ -78,6 +69,52 @@ export const FacilitySystem = {
       });
       return out;
     });
+  },
+
+  /**
+   * 예전 세이브 정리: 마을에 놓았던 시설 · 가방에 있던 시설 아이템을 지하 작업실 자리로 옮긴다.
+   * (진행 중이던 작업은 그대로 이어진다. 자리가 모자라면 산 값을 돌려준다)
+   */
+  normalize() {
+    const s = G.state;
+    const old = s.facilities || [];
+    s.facilities = [];
+    let refund = 0;
+    const place = (kind, job = null) => {
+      const slot = freeSlot(kind);
+      if (slot < 0) { refund += FACILITIES[kind].price; return; }
+      install(kind, slot, job);
+    };
+    // 자리를 이미 가진 시설부터 (그대로 유지)
+    for (const f of old) {
+      if (Number.isInteger(f.slot) && f.slot < CELLAR_SLOT_COUNT[f.kind] && !s.facilities.some((g) => g.kind === f.kind && g.slot === f.slot)) {
+        install(f.kind, f.slot, f.job ?? null);
+        f.done = true;
+      }
+    }
+    for (const f of old) if (!f.done && FACILITIES[f.kind]) place(f.kind, f.job ?? null);
+    for (const kind of Object.keys(FACILITIES)) {
+      const id = FACILITIES[kind].itemId;
+      const n = InventorySystem.countAll(id);
+      if (n > 0) {
+        InventorySystem.consumeAll(id, n);
+        for (let i = 0; i < n; i++) place(kind);
+      }
+    }
+    if (refund) {
+      s.player.money += refund;
+      setTimeout(() => toast(`🏡 지하 작업실 자리가 모자라 남는 시설 값 ${refund.toLocaleString()}원을 돌려받았어요`, 'good'), 1500);
+    }
+    // 가방 · 창고에 있던 일반 흙은 지하 흙 상자로 옮긴다 (상자에 들어가는 만큼)
+    const moveIn = (have, take) => {
+      const k = Math.min(have, SoilBoxSystem.free());
+      if (k > 0) {
+        take(k);
+        SoilBoxSystem.add(k);
+      }
+    };
+    moveIn(InventorySystem.count(SOIL_ID), (k) => InventorySystem.remove(SOIL_ID, k));
+    moveIn(StorageSystem.count(SOIL_ID), (k) => StorageSystem.remove(SOIL_ID, k));
   },
 
   // ─── 3D 모델 ───
@@ -93,16 +130,16 @@ export const FacilitySystem = {
     G.state.facilities.forEach((f, index) => {
       const group = makeModel(f.kind);
       group.position.set(f.x, 0, f.z);
-      group.rotation.y = (f.rot * Math.PI) / 2;
       group.userData = { ...group.userData, type: 'facility', index };
       group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
       scene.add(group);
       interactables.push(group);
-      const r = rectOf(f.kind, f.x, f.z, f.rot);
+      const r = rectOf(f.kind, f.x, f.z);
       const collider = { minX: r.minX + 0.1, maxX: r.maxX - 0.1, minZ: r.minZ + 0.1, maxZ: r.maxZ - 0.1 };
       facilityColliders.push(collider);
       built.push({ group, collider });
     });
+    updateCellarSlots(G.state.facilities);
   },
 
   /** 약탕기 김 · 불씨 애니메이션 */
@@ -123,141 +160,29 @@ export const FacilitySystem = {
     });
   },
 
-  // ─── 구매 · 보유 (배치 전 시설은 가방 '시설' 칸의 아이템) ───
-  /** 가방·핫바·창고에 있는 (아직 배치하지 않은) 시설 수 */
-  stockCount(kind) {
-    return InventorySystem.countAll(FACILITIES[kind].itemId);
-  },
-
+  // ─── 구매 = 지하 작업실에 바로 설치 ───
   ownedCount(kind) {
-    return G.state.facilities.filter((f) => f.kind === kind).length + this.stockCount(kind);
+    return G.state.facilities.filter((f) => f.kind === kind).length;
   },
 
   buy(kind) {
-    const f = FACILITIES[kind];
-    if (this.ownedCount(kind) >= f.max) return toast(`${f.name}은(는) 최대 ${f.max}개까지 가질 수 있어요`, 'warn');
-    if (G.state.player.money < f.price) {
+    const def = FACILITIES[kind];
+    const slot = freeSlot(kind);
+    if (slot < 0 || this.ownedCount(kind) >= def.max) return toast(`${def.name}은(는) 지하 작업실에 ${def.max}개까지 놓을 수 있어요`, 'warn');
+    if (G.state.player.money < def.price) {
       AudioManager.sfx('error');
       return toast('돈이 부족해요', 'warn');
     }
-    if (!InventorySystem.canAdd(f.itemId, 1)) {
-      AudioManager.sfx('error');
-      return toast('가방이 가득 찼어요', 'warn');
-    }
-    G.state.player.money -= f.price;
-    InventorySystem.add(f.itemId, 1);
-    AudioManager.sfx('coin');
-    EventBus.emit('money');
-    EventBus.emit('facility');
-    return true;
-  },
-
-  /** 배치한 시설을 다시 보관함으로 (진행 중인 작업이 없을 때만) */
-  store(i) {
-    const f = G.state.facilities[i];
-    if (!f) return false;
-    if (f.job) {
-      toast('만들고 있는 게 있으면 거둬들일 수 없어요', 'warn');
-      return false;
-    }
-    G.state.facilities.splice(i, 1);
-    InventorySystem.addOrStore(FACILITIES[f.kind].itemId, 1);
-    this.refreshAll();
-    toast(`📦 ${FACILITIES[f.kind].name}을(를) 거둬들였어요. 가방 '시설' 탭에서 다시 배치할 수 있어요`);
-    EventBus.emit('facility');
-    saveGame();
-    return true;
-  },
-
-  // ─── 배치 모드 ───
-  /** kind 를 새로 배치(index = null)하거나, 이미 놓은 시설 index 를 옮긴다 */
-  startPlacement(kind, index = null) {
-    if (currentZone() !== 'village') return toast('시설은 마을에만 놓을 수 있어요', 'warn');
-    if (index === null && !this.stockCount(kind)) return toast('배치할 시설이 없어요. 상점에서 사 오세요', 'warn');
-    this.cancelPlacement(true);
-    const ghost = makeModel(kind);
-    ghostify(ghost);
-    const plate = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x7cc05a, transparent: true, opacity: 0.45, depthWrite: false }));
-    plate.rotation.x = -Math.PI / 2;
-    plate.position.y = 0.05;
-    const root = new THREE.Group();
-    root.add(ghost, plate);
-    scene.add(root);
-    const f = index !== null ? G.state.facilities[index] : null;
-    this.placing = { kind, index, rot: f?.rot ?? 0, x: f?.x ?? G.refs.player.pos.x, z: f?.z ?? G.refs.player.pos.z, root, ghost, plate, reason: '자리를 골라 주세요' };
-    if (f) built[index].group.visible = false;
-    this.applyPlacement();
-  },
-
-  isPlacing() {
-    return !!this.placing;
-  },
-
-  /** 마우스가 가리키는 땅 위치로 미리보기를 옮긴다 */
-  movePlacement(x, z) {
-    const p = this.placing;
-    if (!p) return;
-    p.x = Math.round(x * 2) / 2;
-    p.z = Math.round(z * 2) / 2;
-    this.applyPlacement();
-  },
-
-  rotatePlacement() {
-    const p = this.placing;
-    if (!p) return;
-    p.rot = (p.rot + 1) % 4;
-    AudioManager.sfx('click');
-    this.applyPlacement();
-  },
-
-  applyPlacement() {
-    const p = this.placing;
-    const { w, d } = footprint(p.kind, p.rot);
-    p.root.position.set(p.x, 0, p.z);
-    p.ghost.rotation.y = (p.rot * Math.PI) / 2;
-    p.plate.scale.set(w, d, 1);
-    const ignore = p.index !== null ? built[p.index]?.collider : null;
-    const player = G.refs.player.pos;
-    const r = rectOf(p.kind, p.x, p.z, p.rot);
-    p.reason = placementBlocked(r, { ignore, keepClear: keepClear() });
-    if (!p.reason && player.x > r.minX - 0.3 && player.x < r.maxX + 0.3 && player.z > r.minZ - 0.3 && player.z < r.maxZ + 0.3) p.reason = '내가 서 있는 자리예요';
-    p.plate.material.color.setHex(p.reason ? 0xe2685a : 0x7cc05a);
-    const name = FACILITIES[p.kind].name;
-    setHint(`🏗️ <b>${name} 배치</b> · ${p.reason ? `<span class="bad">${p.reason}</span>` : '<span class="ok">여기에 놓을 수 있어요 — 클릭!</span>'} · R 회전 · Esc 취소`);
-  },
-
-  confirmPlacement() {
-    const p = this.placing;
-    if (!p) return;
-    if (p.reason) {
-      AudioManager.sfx('error');
-      return toast(p.reason, 'warn');
-    }
-    if (p.index === null) {
-      if (!this.stockCount(p.kind)) return this.cancelPlacement();
-      InventorySystem.consumeAll(FACILITIES[p.kind].itemId, 1);
-      G.state.facilities.push({ kind: p.kind, x: p.x, z: p.z, rot: p.rot, job: null });
-    } else {
-      Object.assign(G.state.facilities[p.index], { x: p.x, z: p.z, rot: p.rot });
-    }
-    const name = FACILITIES[p.kind].name;
-    this.cancelPlacement(true);
+    G.state.player.money -= def.price;
+    const f = install(kind, slot);
     this.refreshAll();
     AudioManager.sfx('anvil');
-    burst({ x: p.x, z: p.z }, { color: 0xd9b47a, count: 30, speed: 3, up: 2.5 });
-    toast(`🏗️ ${name}을(를) 놓았어요! 눌러서 사용해요`, 'good');
+    if (currentZone() === 'cellar') burst({ x: f.x, z: f.z }, { color: 0xd9b47a, count: 30, speed: 3, up: 2.5 });
+    toast(`${def.icon} ${def.name}을(를) 우리 집 지하 작업실 ${slot + 1}번 자리에 설치했어요!`, 'good');
+    EventBus.emit('money');
     EventBus.emit('facility');
     saveGame();
-  },
-
-  cancelPlacement(silent = false) {
-    const p = this.placing;
-    if (!p) return;
-    scene.remove(p.root);
-    if (p.index !== null && built[p.index]) built[p.index].group.visible = true;
-    this.placing = null;
-    setHint(null);
-    if (!silent) toast('배치를 취소했어요');
+    return true;
   },
 
   // ─── 작업 (달이기 · 모종 키우기) ───
@@ -267,14 +192,19 @@ export const FacilitySystem = {
     return absMinutes() >= job.doneAt ? 'done' : 'working';
   },
 
-  leftMinutes(i) {
+  /** 남은 실제 시간(초) — 작업은 게임 시간으로 저장되어 있다 */
+  leftSeconds(i) {
     const job = G.state.facilities[i]?.job;
-    return job ? Math.max(0, Math.ceil(job.doneAt - absMinutes())) : 0;
+    return job ? Math.max(0, Math.ceil((job.doneAt - absMinutes()) / GAME_MIN_PER_SEC)) : 0;
   },
 
   leftText(i) {
-    const m = this.leftMinutes(i);
-    return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60 ? `${m % 60}분` : ''}`.trim() : `${m}분`;
+    return durationText(this.leftSeconds(i));
+  },
+
+  /** kind 시설로 n개 만드는 데 걸리는 실제 시간(초) */
+  jobSeconds(kind, n) {
+    return FACILITIES[kind].seconds * Math.max(1, n);
   },
 
   progress(i) {
@@ -300,13 +230,13 @@ export const FacilitySystem = {
     toast(`🍲 토양 흙 ${n}개를 달이기 시작했어요 (${this.leftText(i)})`, 'good');
   },
 
-  /** 육묘장에 넣을 수 있는 씨앗 목록 (모종 말고 일반 씨앗) */
+  /** 육묘장에 넣을 수 있는 씨앗 목록 (모종 말고 일반 씨앗 · 가방 + 창고) */
   nurserySeeds() {
-    return Object.keys(CROPS).map((cropId) => ({ cropId, id: 'seed_' + cropId, n: InventorySystem.count('seed_' + cropId) })).filter((e) => e.n > 0);
+    return Object.keys(CROPS).map((cropId) => ({ cropId, id: 'seed_' + cropId, n: InventorySystem.countAll('seed_' + cropId) })).filter((e) => e.n > 0);
   },
 
   nurseryMax(seedId) {
-    return Math.max(0, Math.min(MAX_BATCH, InventorySystem.count(seedId), InventorySystem.countAll('soil_rich')));
+    return Math.max(0, Math.min(MAX_BATCH, InventorySystem.countAll(seedId), InventorySystem.countAll('soil_rich')));
   },
 
   startNursery(i, seedId, n) {
@@ -314,7 +244,7 @@ export const FacilitySystem = {
     n = Math.min(n, this.nurseryMax(seedId));
     if (!f || f.job || n <= 0) return;
     const cropId = getItem(seedId).cropId;
-    InventorySystem.remove(seedId, n);
+    InventorySystem.consumeAll(seedId, n);
     InventorySystem.consumeAll('soil_rich', n);
     this.startJob(f, 'sapling_' + cropId, n);
     AudioManager.sfx('plant');
@@ -323,7 +253,8 @@ export const FacilitySystem = {
 
   startJob(f, out, n) {
     const now = absMinutes();
-    f.job = { out, n, start: now, doneAt: now + FACILITIES[f.kind].minutes * n };
+    // 실제 시간(초) → 게임 시간(분): 1초 = GAME_MIN_PER_SEC 분
+    f.job = { out, n, start: now, doneAt: now + this.jobSeconds(f.kind, n) * GAME_MIN_PER_SEC };
     EventBus.emit('facility');
     saveGame();
   },
@@ -345,7 +276,7 @@ export const FacilitySystem = {
   /** 상호작용 거리 계산용 반지름 */
   reach(i) {
     const f = G.state.facilities[i];
-    const { w, d } = footprint(f.kind, f.rot);
-    return Math.max(w, d) / 2 + 1.4;
+    const def = FACILITIES[f.kind];
+    return Math.max(def.w, def.d) / 2 + 1.4;
   },
 };

@@ -58,7 +58,8 @@ export class CameraController {
       this.camera.lookAt(this.lookCur);
       return;
     }
-    let dist = this.dist;
+    // maxDist: 좁은 실내에서는 카메라를 조금 더 가까이
+    let dist = Math.min(this.dist, this.maxDist ?? Infinity);
     if (this.mode === 'orbit') {
       this.yaw += dt * this.orbitSpeed;
       this.target.lerp(this.orbitCenter, 1 - Math.exp(-3 * dt));

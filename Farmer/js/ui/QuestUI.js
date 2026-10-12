@@ -10,7 +10,7 @@ import { QuestSystem } from '../systems/QuestSystem.js';
 import { openModal, closeModal, refreshModal, tabsHTML, bindTabs } from './Panels.js';
 
 // 메인 퀘스트 = 박 이장에게서만 받는 이장 퀘스트, 서브 퀘스트 = 다른 주민들의 부탁
-const TABS = [['main', '⭐ 메인 퀘스트 · 박 이장'], ['sub', '🌿 서브 퀘스트 · 주민 부탁']];
+const tabs = () => [['main', `⭐ 메인 퀘스트 · ${NPCS.chief.name}`], ['sub', '🌿 서브 퀘스트 · 주민 부탁']];
 let tab = 'main';
 let selected = null;
 
@@ -74,7 +74,7 @@ function listHTML(list) {
     if (!items.length) return '';
     return `<div class="q-section">${title} <small>${items.length}</small></div>${items.map(itemHTML).join('')}`;
   }).join('');
-  return html || `<div class="q-empty">${tab === 'main' ? '박 이장님의 부탁을 모두 마쳤어요!' : '아직 받은 주민 부탁이 없어요.<br>마을 주민들에게 말을 걸면 부탁을 받을 수 있어요.'}</div>`;
+  return html || `<div class="q-empty">${tab === 'main' ? `${NPCS.chief.name}님의 부탁을 모두 마쳤어요!` : '아직 받은 주민 부탁이 없어요.<br>마을 주민들에게 말을 걸면 부탁을 받을 수 있어요.'}</div>`;
 }
 
 /** 진행 중이 아닌 퀘스트의 목표 문구 (진행도 없이) */
@@ -127,10 +127,10 @@ function render(body) {
   const next = RANKS.find((r) => r.need > s.mainIndex);
   const progress = tab === 'main'
     ? `메인 퀘스트 <b>${s.mainIndex} / ${MAIN_QUESTS.length}</b> 완료 · 현재 직책 <b>${RANKS[G.state.rank].name}</b>${next ? ` · 다음 직책 '${next.name}'까지 ${next.need - s.mainIndex}개` : ' · 🎩 마을 이장 달성!'}`
-    : `서브 퀘스트 <b>${subDone} / ${SUB_QUESTS.length}</b> 완료 · 주민 부탁을 들어주면 친밀도가 올라요`;
+    : `서브 퀘스트 <b>${subDone} / ${SUB_QUESTS.length}</b> 완료 · 주민 부탁을 들어주면 옷 · 장식 같은 특별한 보상을 받아요`;
 
   body.innerHTML = `
-    ${tabsHTML(TABS, tab)}
+    ${tabsHTML(tabs(), tab)}
     <div class="q-progress">${progress}</div>
     <div class="q-wrap">
       <div class="q-list scroll">${listHTML(list)}</div>

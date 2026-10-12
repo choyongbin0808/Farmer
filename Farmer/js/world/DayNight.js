@@ -26,14 +26,15 @@ const SNOW_BOT = new THREE.Color(0xe8eef4);
 const sunDir = new THREE.Vector3();
 
 export function periodOf(minutes) {
-  const h = minutes / 60;
+  const h = (minutes / 60) % 24;
+  if (h < 5) return 'night'; // 자정 넘어 새벽까지는 밤
   if (h < 12) return 'morning';
   if (h < 18) return 'day';
   return 'night';
 }
 
 export function isNight(minutes) {
-  const h = minutes / 60;
+  const h = (minutes / 60) % 24;
   return h >= 18.7 || h < 5.5;
 }
 
@@ -59,11 +60,44 @@ function updateMineLight(focus) {
   LAMP_MAT.emissiveIntensity = 2;
 }
 
-export function updateDayNight(minutes, weather, focus, inMine = false) {
-  if (inMine) return updateMineLight(focus);
+const ROOM_DARK = new THREE.Color(0x1a130e);
+const ROOM_ENV_DAY = new THREE.Color(0xf4e2c4);
+const ROOM_ENV_NIGHT = new THREE.Color(0x5a4a3a);
+const roomEnv = new THREE.Color();
+
+/** 집 · 마을회관 안: 창으로 드는 햇빛(낮) / 은은한 달빛(밤) + 실내 등불(Interiors 가 조절) */
+function updateRoomLight(minutes, weather, focus, noWindow = false) {
+  let h = (minutes / 60) % 24;
+  if (h < 5) h += 24;
+  // 0 = 한낮, 1 = 한밤 (창이 없는 지하는 늘 등불만)
+  const night = noWindow ? 1 : h < 6.5 ? 1 - (h - 5.5) : THREE.MathUtils.clamp((h - 17.5) / 2.5, 0, 1);
+  const dim = weather === 'rain' ? 0.75 : weather === 'cloudy' ? 0.88 : 1;
+  roomEnv.copy(ROOM_ENV_DAY).lerp(ROOM_ENV_NIGHT, night);
+  const u = SM.sky.material.uniforms;
+  u.top.value.copy(roomEnv);
+  u.bottom.value.copy(roomEnv);
+  SM.scene.fog.color.copy(ROOM_DARK);
+  SM.scene.fog.density = 0.016;
+  SM.scene.background.copy(ROOM_DARK);
+  SM.hemi.color.setHex(0xfff0dc);
+  SM.hemi.groundColor.setHex(0x8a6a4a);
+  SM.hemi.intensity = THREE.MathUtils.lerp(1.05, 0.5, night) * dim;
+  // 북동쪽 높은 창에서 비스듬히 드는 빛
+  SM.sun.position.set(focus.x + 10, 26, focus.z - 14);
+  SM.sun.target.position.set(focus.x, 0, focus.z);
+  SM.sun.color.setHex(night > 0.5 ? 0x9fb4e8 : 0xfff2dc);
+  SM.sun.intensity = THREE.MathUtils.lerp(0.95, 0.12, night) * dim;
+  SM.updateEnvironment(`room|${Math.round(night * 4)}`);
+  WINDOW_MAT.emissiveIntensity = 0;
+}
+
+/** indoor: 'mine'(광산) · 'room'(집 · 마을회관) · 'cellar'(지하 작업실) · false(바깥) — 예전처럼 true 를 넘기면 광산 */
+export function updateDayNight(minutes, weather, focus, indoor = false) {
+  if (indoor === 'room' || indoor === 'cellar') return updateRoomLight(minutes, indoor === 'cellar' ? 'sunny' : weather, focus, indoor === 'cellar');
+  if (indoor) return updateMineLight(focus);
   SM.hemi.color.setHex(0xe2f0ff);
   SM.hemi.groundColor.setHex(0xb8a888);
-  let h = minutes / 60;
+  let h = (minutes / 60) % 24;
   if (h < 5) h += 24;
   let i = 0;
   while (i < KEYS.length - 2 && h > KEYS[i + 1][0]) i++;

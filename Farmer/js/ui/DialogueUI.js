@@ -42,6 +42,8 @@ export const DialogueUI = {
   setSpeaker(speaker) {
     el.avatar.textContent = speaker.avatar || '🙂';
     el.name.textContent = speaker.name;
+    // 말하는 사람마다 목소리 높이가 다르다
+    AudioManager.setVoice(speaker.name);
   },
 
   /** 대사 여러 줄을 순서대로 보여 주고 모두 넘기면 resolve */
@@ -79,7 +81,7 @@ export const DialogueUI = {
       const timer = setInterval(() => {
         i++;
         el.text.textContent = text.slice(0, i);
-        if (i % 3 === 0) AudioManager.sfx('talk');
+        if (i % 3 === 1 && text[i - 1] !== ' ') AudioManager.sfx('talk');
         if (i >= text.length) done();
       }, 28);
       const done = () => {

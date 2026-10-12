@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { G } from '../core/Game.js';
-import { plotDays } from '../data/crops.js';
+import { plotGrowMinutes } from '../data/crops.js';
 import { makeCropModel } from '../world/Models.js';
 import { soilTex } from '../world/Textures.js';
 
@@ -45,13 +45,21 @@ export class FarmPlot {
     return this.r < size && this.c < size;
   }
 
+  /** 자란 정도 0~1 */
+  growth() {
+    const d = this.data;
+    if (d.state !== 'planted') return 0;
+    return Math.min(1, (d.grown || 0) / plotGrowMinutes(d));
+  }
+
+  /** 0 새싹 · 1 · 2 · 3 다 자람 (-1 = 안 심음) */
   stage() {
     const d = this.data;
     if (d.state !== 'planted') return -1;
-    const days = plotDays(d);
-    if (d.daysGrown >= days) return 3;
-    if (d.daysGrown === 0) return 0;
-    return d.daysGrown / days < 0.5 ? 1 : 2;
+    const k = this.growth();
+    if (k >= 1) return 3;
+    if (k < 0.2) return 0;
+    return k < 0.6 ? 1 : 2;
   }
 
   isReady() {

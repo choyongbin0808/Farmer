@@ -9,15 +9,15 @@ import { NPCS } from '../data/npcs.js';
 import { CLOTHES } from '../data/clothes.js';
 import { getItem, isHandTool } from '../data/items.js';
 import { StorageSystem } from './StorageSystem.js';
-import { MINE_EXIT, ladderPos } from '../world/Mine.js';
+import { MINE_EXIT, ladderPos, liftPos } from '../world/Mine.js';
 import { TOOL_ORDER, TIERS } from '../data/tools.js';
 import { InventorySystem } from './InventorySystem.js';
 import { GearSystem } from './GearSystem.js';
-import { RelationSystem } from './RelationSystem.js';
 import { OutfitSystem } from './OutfitSystem.js';
 import { FarmSystem, EXPAND_COSTS } from './FarmSystem.js';
 import { RankSystem } from './RankSystem.js';
 import { updateDecorations, farmCenter, PLAZA, BUILDINGS, MINE_DOOR } from '../world/World.js';
+import { ROOMS, isRoom, roomDoor, roomEntry, HOUSE_WAKE } from '../world/Interiors.js';
 import { toast, banner } from '../ui/HUD.js';
 
 const SUB_BY_ID = Object.fromEntries(SUB_QUESTS.map((q) => [q.id, q]));
@@ -105,10 +105,6 @@ export const QuestSystem = {
         cur = GearSystem.countEnhanced(o.level); need = o.count;
         label = o.count >= 3 ? `장착한 모든 농기구를 +${o.level} 이상 강화` : `장착한 농기구를 +${o.level} 이상 강화`;
         break;
-      case 'relation':
-        cur = RelationSystem.countWithHearts(o.hearts); need = o.count;
-        label = o.count >= RESIDENTS.length ? `모든 주민과 ${o.hearts}하트 이상` : `주민과 ${o.hearts}하트 이상 친해지기`;
-        break;
       case 'dayHarvest':
         cur = p.done ? o.count : p.day === s.time.day ? p.n : 0; need = o.count; label = '하루에 작물 수확하기 (오늘 기준)';
         break;
@@ -155,7 +151,6 @@ export const QuestSystem = {
       const r = q.req || {};
       if (r.mainDone && s.quests.mainIndex < r.mainDone) continue;
       if (r.prev && s.quests.subs[r.prev]?.status !== 'done') continue;
-      if (r.hearts && RelationSystem.hearts(npcId) < r.hearts) continue;
       out.push(q);
     }
     return out;
@@ -209,7 +204,6 @@ export const QuestSystem = {
       s.quests.mainIndex++;
     } else {
       rec.status = 'done';
-      RelationSystem.add(q.giver, 20);
     }
     if (s.quests.tracked === q.id) s.quests.tracked = null;
     AudioManager.sfx('quest');
@@ -240,7 +234,7 @@ export const QuestSystem = {
     }
     for (const id of r.clothes || []) {
       OutfitSystem.addClothes(id);
-      msgs.push(`${CLOTHES[id].icon} ${CLOTHES[id].name}`);
+      msgs.push(`${CLOTHES[id].icon} ${CLOTHES[id].name}${r.autoEquip ? '' : ' (집 옷장에서 입어요)'}`);
     }
     if (r.autoEquip) for (const id of r.clothes || []) OutfitSystem.equip(id);
     if (r.expand && !FarmSystem.expand(r.expand)) {
@@ -259,14 +253,14 @@ export const QuestSystem = {
       if (f === 'mine') msgs.push('⛏️ 광산 출입 허가 (마을 동쪽 끝)');
     }
     updateDecorations(s.flags);
-    for (const [npc, v] of Object.entries(r.relation || {})) RelationSystem.add(npc, v);
     if (msgs.length) setTimeout(() => toast(`보상: ${msgs.join(' · ')}`, 'good'), 600);
   },
 
   // ─── NPC 머리 위 아이콘 ───
   /**
-   * 머리 위 표시: ✅ 완료 보고·전달할 수 있음 / ❗(빨강) 진행 중인 퀘스트와 관련된 사람
-   * 아직 받지 않은 퀘스트는 표시하지 않는다 (퀘스트 창의 '받을 수 있는 퀘스트'에서 확인)
+   * 머리 위 표시: ✅ 완료 보고·전달할 수 있음 / ❗(빨강) 위치 표시 중인 퀘스트의 '지금 단계' 상대 한 명
+   * 단계를 끝내면 ❗ 가 다음 단계의 사람으로 옮겨 가고, 모두 끝나면 퀘스트를 준 사람에게 ✅.
+   * 위치 표시를 끄면 ❗ 는 모두 사라진다. 아직 받지 않은 퀘스트는 표시하지 않는다.
    */
   npcIcon(npcId) {
     if (this.completableFor(npcId).length || this.deliverablesFor(npcId).length) return '✅';
@@ -274,19 +268,34 @@ export const QuestSystem = {
     return null;
   },
 
-  /** 진행 중인 퀘스트를 준 사람이거나, 아직 끝나지 않은 목표의 상대(대화·전달)인지 */
+  /**
+   * 위치 표시 중인 퀘스트의 지금 단계에서 찾아가야 할 사람 (없으면 null).
+   * 목표를 순서대로 보며 처음으로 끝나지 않은 목표가 '지금 단계':
+   *  인사하기 → 아직 인사 안 한 첫 사람 · 전달하기 → 받을 사람 · 특정 날/횟수 대화 → 그 사람
+   *  밭 갈기 · 수확 · 판매처럼 사람이 필요 없는 단계면 ❗ 없음
+   */
+  stepNpc() {
+    const q = this.tracked();
+    const rec = q && this.recordOf(q);
+    if (!rec) return null;
+    for (let i = 0; i < q.objectives.length; i++) {
+      const o = q.objectives[i];
+      const p = rec.progress[i];
+      if (!p) continue;
+      if (o.kind === 'deliver') {
+        if (p.done) continue;
+        return o.to;
+      }
+      if (this.objInfo(q, o, p).done) continue;
+      if (o.kind === 'talk') return o.targets.find((t) => !p.list.includes(t)) ?? null;
+      if (o.kind === 'talkRain' || o.kind === 'talkTimes') return o.npc;
+      return null;
+    }
+    return null;
+  },
+
   inProgressWith(npcId) {
-    if (npcId === 'han' && G.state.flags.mine && !G.state.flags.gotPickaxe) return true;
-    return this.active().some(({ q, rec }) => {
-      if (q.giver === npcId) return true;
-      return q.objectives.some((o, i) => {
-        const p = rec.progress[i];
-        if (o.kind === 'talk') return o.targets.includes(npcId) && !p.list.includes(npcId);
-        if (o.kind === 'deliver') return o.to === npcId && !p.done;
-        if (o.kind === 'talkRain' || o.kind === 'talkTimes') return o.npc === npcId && !p.done;
-        return false;
-      });
-    });
+    return this.stepNpc() === npcId;
   },
 
   // ─── 새 마을회관 ───
@@ -332,11 +341,24 @@ export const QuestSystem = {
     if (here === 'mine') {
       const f = currentMineFloor();
       if (zone === 'mine' && floor === f) return { ...pos, label };
-      // 광산 아래층에 있으면 먼저 위층 사다리로 (광산 사람들은 모두 1층 입구에 있다)
-      if (f > 0) return { ...ladderPos(f, 'up'), label: `위층 사다리 → ${label}` };
+      // 광산 아래층에 있으면 승강기로 바로 1층(입구)에 (광산 사람들은 모두 1층 입구에 있다)
+      if (f > 0) {
+        const lp = liftPos(f);
+        return lp ? { ...lp, label: `승강기 → ${label}` } : { ...ladderPos(f, 'up'), label: `위층 사다리 → ${label}` };
+      }
       return { ...MINE_EXIT, label: `광산 출구 → ${label}` };
     }
     if (zone === here) return { ...pos, label };
+    // 집 · 마을회관 안이면 먼저 문으로 (집에서 지하 목표면 계단으로, 지하에서는 올라가는 계단으로)
+    if (isRoom(here)) {
+      if (isRoom(zone) && ROOMS[zone].via === here) return { ...roomEntry(zone), label: `계단 → ${label}` };
+      return { ...roomDoor(here), label: `${here === 'cellar' ? '계단' : '문'} → ${label}` };
+    }
+    // 마을에서 건물 안의 목표: 그 건물 입구
+    if (isRoom(zone)) {
+      const b = BUILDINGS[ROOMS[zone].via ?? zone];
+      return { x: b.ix, z: b.iz, label: `${ROOMS[zone].name} → ${label}` };
+    }
     return { ...MINE_DOOR, label: `광산 입구 → ${label}` };
   },
 
@@ -347,7 +369,8 @@ export const QuestSystem = {
 
   /** 주민 위치 + 이름표 + 구역 */
   npcAt(id, label = npcName(id)) {
-    return { ...this.npcPos(id), label, zone: NPCS[id].zone ?? 'village' };
+    // npc: 목표가 사람인지 (사람이면 머리 위 ❗ · ✅ 가 표시된다)
+    return { ...this.npcPos(id), label, zone: NPCS[id].zone ?? 'village', npc: id };
   },
 
   /** 위치 표시 대상 (지금 구역 기준으로, 다른 구역이면 출입구) */
@@ -375,22 +398,21 @@ export const QuestSystem = {
           const left = o.targets.find((t) => !rec.progress[i].list.includes(t));
           return this.npcAt(left);
         }
-        case 'earn': case 'sellCount': case 'totalEarned':
-          return this.npcAt('shop', '상점');
+        case 'earn': case 'sellCount': case 'totalEarned': {
+          // 작물은 창고에서만 판다
+          const st = BUILDINGS.storage;
+          return { x: st.ix, z: st.iz, label: '창고에서 작물 판매' };
+        }
         case 'toolLevel':
           return this.npcAt('shop', '상점');
         case 'enhance':
           return this.npcAt('smith', '대장간');
-        case 'relation':
-          return { x: PLAZA.x, z: PLAZA.z, label: '마을 광장' };
         case 'talkRain': case 'talkTimes':
           return this.npcAt(o.npc);
         case 'hallFund':
           return this.npcAt('chief', '이장님께 건축비 내기');
-        case 'hallBuilt': {
-          const h = BUILDINGS.house;
-          return { x: h.ix, z: h.iz, label: '집에서 하룻밤 자기' };
-        }
+        case 'hallBuilt':
+          return { ...HOUSE_WAKE, zone: 'house', label: '침대에서 하룻밤 자기' };
         default:
           return farm;
       }
@@ -446,7 +468,7 @@ export const QuestSystem = {
       if (o.kind === 'earn') p.n += money;
       if (o.kind === 'sellCount') p.n += n;
     }));
-    for (const evt of ['gear', 'relation', 'money', 'storage', 'inventory', 'farmExpand']) {
+    for (const evt of ['gear', 'money', 'storage', 'inventory', 'farmExpand']) {
       EventBus.on(evt, () => EventBus.emit('quests'));
     }
   },

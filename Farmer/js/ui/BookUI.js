@@ -1,6 +1,6 @@
 import { G, formatMoney } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
-import { CROPS, CROP_ORDER, stars, seedlingDays } from '../data/crops.js';
+import { CROPS, CROP_ORDER, stars, growSeconds, growText } from '../data/crops.js';
 import { FISH, FISH_ORDER, GRADE_REWARD, weightText } from '../data/fishing.js';
 import { ORES, ORE_ORDER, PICKAXES } from '../data/mining.js';
 import { makeCropModel } from '../world/Models.js';
@@ -54,7 +54,7 @@ function infoHTML(e) {
     return `
       <div><span>🧺 수확한 수</span><b>${e.count.toLocaleString()}개</b></div>
       <div><span>⭐ 등급</span><b class="stars">${stars(c.grade)}</b></div>
-      <div><span>🌱 자라는 기간</span><b>${c.days}일</b><small>모종이면 ${seedlingDays(e.id)}일</small></div>
+      <div><span>🌱 자라는 시간</span><b>${growText(c.grow)}</b><small>모종이면 ${growText(growSeconds(e.id, true))}</small></div>
       <div><span>💰 판매가</span><b>${formatMoney(c.sellPrice)}원</b></div>`;
   }
   if (tab === 'fish') {

@@ -3,13 +3,14 @@ import { AudioManager } from '../core/AudioManager.js';
 
 let current = null;
 
-export function openModal(id, title, render, { wide = false, onClose } = {}) {
+/** cls: 모달에 더할 클래스 (도움말 나무 판자처럼 모양을 따로 꾸밀 때) */
+export function openModal(id, title, render, { wide = false, onClose, cls = '' } = {}) {
   closeModal(true);
   const root = document.getElementById('modal-root');
   const back = document.createElement('div');
   back.className = 'modal-backdrop';
   back.innerHTML = `
-    <div class="modal panel ${wide ? 'wide' : ''}">
+    <div class="modal panel ${wide ? 'wide' : ''} ${cls}">
       <div class="modal-head"><h2>${title}</h2><button class="close-btn" title="닫기 (Esc)">✕</button></div>
       <div class="modal-body"></div>
     </div>`;

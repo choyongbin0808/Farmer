@@ -1,7 +1,7 @@
-import { G, FARM_MAX, HOTBAR_SIZE } from '../core/Game.js';
+import { G, FARM_MAX, HOTBAR_SIZE, GAME_MIN_PER_SEC } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
-import { CROPS, plotDays } from '../data/crops.js';
+import { CROPS, plotGrowMinutes, josa } from '../data/crops.js';
 import { TOOLS, rollHarvest } from '../data/tools.js';
 import { getItem } from '../data/items.js';
 import { InventorySystem } from './InventorySystem.js';
@@ -125,7 +125,7 @@ export const FarmSystem = {
       d.state = 'planted';
       d.cropId = cropId;
       d.seedling = !!held.item.seedling;
-      d.daysGrown = 0;
+      d.grown = 0;
       d.plantedDay = G.state.time.day;
       plot.refresh();
       burst({ x: plot.x, z: plot.z }, { color: 0xd9b47a, count: 10, up: 1.5 });
@@ -134,18 +134,55 @@ export const FarmSystem = {
     }, 'plant', { item: held.item });
   },
 
-  /** 성장 아이템(비료 · 성장 촉진제): item.growDays 만큼 성장, 'all'이면 바로 다 자람 */
+  /** 성장 아이템(비료 · 성장 촉진제): item.growSec 초만큼 앞당김, 'all'이면 바로 다 자람 */
   fertilize(plot, held) {
     const d = plot.data;
     const item = held.item;
     if (d.state !== 'planted' || plot.isReady()) return toast('자라고 있는 작물에만 쓸 수 있어요');
     InventorySystem.removeFromSlot(held.area, held.index, 1);
-    const days = plotDays(d);
-    d.daysGrown = item.growDays === 'all' ? days : Math.min(days, d.daysGrown + (item.growDays ?? 1));
+    this.applyGrowth(plot, item);
+  },
+
+  /** 작물 정보 창의 [성장 촉진제] 버튼: 가방 · 핫바에 있는 아이템을 하나 써서 바로 다 자라게 */
+  useBooster(plot, itemId = 'special_growth') {
+    const d = plot.data;
+    if (d.state !== 'planted' || plot.isReady()) return toast('자라고 있는 작물에만 쓸 수 있어요');
+    if (InventorySystem.remove(itemId, 1) < 1) {
+      AudioManager.sfx('error');
+      return toast(`${getItem(itemId).icon} ${getItem(itemId).name}가 없어요. 상점에서 살 수 있어요`, 'warn');
+    }
+    this.applyGrowth(plot, getItem(itemId));
+  },
+
+  applyGrowth(plot, item) {
+    const d = plot.data;
+    const need = plotGrowMinutes(d);
+    d.grown = item.growSec === 'all' ? need : Math.min(need, (d.grown || 0) + (item.growSec ?? 15) * GAME_MIN_PER_SEC);
     plot.refresh();
     burst({ x: plot.x, z: plot.z }, { color: 0x9be36a, count: 24, up: 3 });
     AudioManager.sfx('plant');
     toast(plot.isReady() ? `${item.icon} ${CROPS[d.cropId].name}이(가) 다 자랐어요! 바로 수확할 수 있어요` : `${item.icon} ${item.name} 덕분에 작물이 쑥 자랐어요!`, 'good');
+  },
+
+  /** 갈아엎기: 심은 작물을 없애고 막 간 땅으로 되돌린다 (씨앗은 돌려받지 못함 · 물 준 상태는 그대로라 바로 다시 심을 수 있음) */
+  plowUnder(plot) {
+    const d = plot.data;
+    if (d.state !== 'planted' || G.refs.player.work) return;
+    const name = CROPS[d.cropId].name;
+    G.refs.player.faceTo(plot.x, plot.z);
+    G.refs.player.startWork(GearSystem.stats('hoe').time, () => {
+      if (plot.data.state !== 'planted') return;
+      d.state = 'tilled';
+      d.cropId = null;
+      d.seedling = false;
+      d.grown = 0;
+      d.plantedDay = null;
+      plot.refresh();
+      burst({ x: plot.x, z: plot.z }, { color: 0x8b5a3c, count: 22, up: 2 });
+      AudioManager.sfx('till');
+      toast(`🔄 ${name}${josa(name, '을', '를')} 갈아엎었어요. ${d.watered ? '바로 새 씨앗을 심을 수 있어요' : '물을 주면 새 씨앗을 심을 수 있어요'}`);
+      EventBus.emit('plowUnder', plot);
+    }, 'till', this.toolProp('hoe'));
   },
 
   harvest(plot) {
@@ -157,15 +194,15 @@ export const FarmSystem = {
       const cropId = d.cropId;
       const amount = rollHarvest(st.harvest);
       StorageSystem.add('crop_' + cropId, amount);
-      const st = G.state.stats;
-      st.totalHarvest += amount;
-      st.todayHarvest += amount;
-      st.harvested[cropId] = (st.harvested[cropId] || 0) + amount;
+      const stats = G.state.stats;
+      stats.totalHarvest += amount;
+      stats.todayHarvest += amount;
+      stats.harvested[cropId] = (stats.harvested[cropId] || 0) + amount;
       // 수확한 땅은 굳어서 다시 호미로 갈아야 함
       d.state = 'empty';
       d.cropId = null;
       d.seedling = false;
-      d.daysGrown = 0;
+      d.grown = 0;
       d.watered = false;
       plot.refresh();
       flyToStorage(cropId, plot, amount);
@@ -175,11 +212,39 @@ export const FarmSystem = {
     }, 'harvest', this.toolProp('sickle'));
   },
 
-  /** 잠자고 일어날 때: 물 준 작물 성장 */
-  growAll() {
+  /**
+   * 게임 시간이 gameMinutes 만큼 흐를 때: 물 준 작물이 그만큼 자란다 (TimeSystem.update 에서 매 프레임).
+   * 단계가 바뀌면 모델을 바꾸고, 새로 다 자란 작물이 있으면 알려 준다.
+   */
+  tick(gameMinutes) {
+    const ready = [];
     for (const p of plots()) {
       const d = p.data;
-      if (d.state === 'planted' && d.watered && d.daysGrown < plotDays(d)) d.daysGrown++;
+      if (d.state !== 'planted' || !d.watered || !p.active) continue;
+      const need = plotGrowMinutes(d);
+      if ((d.grown || 0) >= need) continue;
+      const before = p.stage();
+      d.grown = Math.min(need, (d.grown || 0) + gameMinutes);
+      if (p.stage() !== before) {
+        p.refresh();
+        if (p.isReady()) ready.push(d.cropId);
+      }
+    }
+    if (ready.length) {
+      const c = CROPS[ready[0]];
+      // 받침이 있으면 '이', 없으면 '가'
+      const code = c.name.charCodeAt(c.name.length - 1) - 0xac00;
+      const josa = code >= 0 && code % 28 ? '이' : '가';
+      toast(`${c.icon} ${c.name}${ready.length > 1 ? ` 외 ${ready.length - 1}칸이` : josa} 다 자랐어요! 수확해요`, 'good');
+      EventBus.emit('grow');
+    }
+  },
+
+  /** 잠자는 동안(밤) 흐른 시간만큼 물 준 작물이 자라고, 아침이 되면 물이 마른다 */
+  growAll(nightMinutes = 0) {
+    for (const p of plots()) {
+      const d = p.data;
+      if (d.state === 'planted' && d.watered) d.grown = Math.min(plotGrowMinutes(d), (d.grown || 0) + nightMinutes);
       d.watered = false;
     }
   },

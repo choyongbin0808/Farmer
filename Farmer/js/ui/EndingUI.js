@@ -3,7 +3,6 @@ import { G, RESIDENTS, formatMoney, currentZone } from '../core/Game.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { saveGame } from '../core/SaveManager.js';
 import { NPCS, NPC_ORDER } from '../data/npcs.js';
-import { RelationSystem } from '../systems/RelationSystem.js';
 import { MiningSystem } from '../systems/MiningSystem.js';
 import { PLAZA, setFestival, updateDecorations } from '../world/World.js';
 import { setWeather } from '../world/Weather.js';
@@ -13,7 +12,7 @@ import { fade, showHUD } from './HUD.js';
 
 /**
  * 엔딩 — 예고편처럼 연출되는 밤의 광장
- * 민지가 뛰노는 광장의 큰 나무에 꼬마전구를 달고, 마을 사람 모두가 모인 가운데
+ * 마을 한가운데 광장의 큰 나무에 꼬마전구를 달고, 마을 사람 모두가 모인 가운데
  * 박 이장이 귀농인을 새 마을 이장으로 인정한다 → 모두 박수 → "게임을 클리어해 주셔서 감사합니다"
  * 게임 데이터는 그대로 두고, 끝나면 이어서 플레이한다.
  */
@@ -152,9 +151,9 @@ function endCard(s, name) {
         <div><span>총 수확량</span><b>${s.stats.totalHarvest.toLocaleString()}개</b></div>
         <div><span>작물 판매 수익</span><b>${formatMoney(s.stats.totalEarned)}원</b></div>
         <div><span>낚은 물고기</span><b>${(s.fishing?.caught ?? 0).toLocaleString()}마리</b></div>
-        <div><span>주민 친밀도</span><b>${RESIDENTS.map((id) => `${NPCS[id].avatar}${'❤️'.repeat(RelationSystem.hearts(id))}`).join(' ')}</b></div>
+        <div><span>캔 광석</span><b>${Object.values(s.mine?.mined || {}).reduce((a, b) => a + b, 0).toLocaleString()}개</b></div>
       </div>
-      <div class="credits">FARMER — 3D 힐링 농사 RPG</div>
+      <div class="credits">초록마을 귀농일기 — 3D 힐링 농사 RPG</div>
       <div class="end-note">💾 진행 상황은 그대로 저장돼 있어요. 남은 농사 · 낚시 · 광산 · 시설을 마음껏 즐겨 주세요!</div>
       <button class="btn primary big" id="btn-continue">🌾 계속 플레이하기</button>
     </div>`;
@@ -195,7 +194,7 @@ export async function playEnding(onFinish) {
     // ① 오프닝 — 불 켜진 나무를 천천히 돌며
     AudioManager.sfx('chime');
     await g(caption('그날 밤, 초록마을 광장', 2800));
-    await g(caption('민지가 뛰놀던 큰 나무에 하나둘 불이 켜지고<br>마을 사람들이 모두 모였습니다', 3400));
+    await g(caption('마을 한가운데 큰 나무에 하나둘 불이 켜지고<br>마을 사람들이 모두 모였습니다', 3400));
 
     // ② 이장과 귀농인 — 최종 장비(넓은 모자)를 쓴 귀농인이 이장을 가리지 않도록
     //    두 사람을 잇는 선에서 비켜난 옆쪽에서 비춘다

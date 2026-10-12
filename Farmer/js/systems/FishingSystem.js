@@ -123,8 +123,9 @@ export const FishingSystem = {
   /** 둑에 선 뒤 호출 — 파워 게이지부터 (spot.x: 찌를 던질 방향) */
   cast(spot, rodItem) {
     const p = G.refs.player;
-    if (this.s || p.work || !this.canStart()) return;
-    const rod = ROD_BY_ID[rodItem.id];
+    const rod = ROD_BY_ID[rodItem?.id];
+    // 낚싯대가 아닌 걸 들고 있으면 시작하지 않는다 (입질 때 낚싯대 정보가 없어 멈추는 것 방지)
+    if (!rod || this.s || p.work || !this.canStart()) return;
     this.s = { phase: 'charge', spot: { ...spot }, rod, item: rodItem, power: 0, dir: 1, timer: 0, bonus: 0 };
     p.faceTo(spot.x, STREAM_Z);
     p.keepHeld = true;
@@ -146,8 +147,8 @@ export const FishingSystem = {
     showUI(null);
     if (perfect) addFloatText('완벽!', { x: p.pos.x, y: 2.8, z: p.pos.z }, '#e6a93a');
     p.faceTo(s.spot.x, s.spot.z);
+    // 휘두르는 소리·릴 풀리는 소리는 동작에 맞춰 (AudioManager.updateWork)
     p.startWork(0.9, () => this.landBobber(), 'cast', { item: s.item });
-    AudioManager.sfx('cast');
     setHint('🎣 찌를 던지는 중…');
   },
 
@@ -225,6 +226,14 @@ export const FishingSystem = {
     s.fishY += THREE.MathUtils.clamp(s.fishTarget - s.fishY, -speed * dt, speed * dt) + Math.sin(t * 9) * 0.002 * s.diff;
     s.fishY = THREE.MathUtils.clamp(s.fishY, 0, 1);
     const inside = s.fishY >= s.bar && s.fishY <= s.bar + s.barSize;
+    // 소리: 누르는 동안 릴 감는 딸깍딸깍, 놓치고 있으면 줄 풀리는 낮은 드래그, 내달릴 때 첨벙
+    s.tick = (s.tick || 0) - dt;
+    if (s.tick <= 0) {
+      if (hold) { s.tick = 0.075; AudioManager.sfx('reelTick'); }
+      else if (!inside) { s.tick = 0.17; AudioManager.sfx('dragTick'); }
+    }
+    if (s.dart > 0 && !s.dartSnd) AudioManager.sfx('splashSmall');
+    s.dartSnd = s.dart > 0;
     s.progress += (inside ? 0.42 * (1 + s.rod.tier * 0.06) : -0.22 * (1 - s.rod.tier * 0.08)) * dt;
     // 화면
     ui.bar.style.bottom = `${s.bar * 100}%`;
@@ -339,7 +348,10 @@ export const FishingSystem = {
         shadow.position.set(s.spot.x + Math.cos(s.angle) * r, 0.075, s.spot.z + Math.sin(s.angle) * r * 0.55);
         shadow.rotation.z = -s.angle - Math.PI / 2;
         let y = 0.08 + Math.sin(t * 3) * 0.015;
-        if (k < 0.25 && Math.sin(t * 13) > 0.85) y -= 0.035; // 톡톡 건드리는 척
+        const dip = k < 0.25 && Math.sin(t * 13) > 0.85;
+        if (dip) y -= 0.035; // 톡톡 건드리는 척
+        if (dip && !s.dip) AudioManager.sfx('plip');
+        s.dip = dip;
         bobber.position.y = y;
         if (s.timer <= 0) {
           s.phase = 'bite';

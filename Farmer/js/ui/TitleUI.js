@@ -1,5 +1,4 @@
 import { AudioManager } from '../core/AudioManager.js';
-import { HOTBAR_SIZE } from '../core/Game.js';
 import { prologueComicHTML } from './PrologueComic.js';
 
 const $ = (id) => document.getElementById(id);
@@ -9,7 +8,7 @@ const OPENING = [
   '매일 같은 지하철, 같은 사무실, 같은 야근….',
   '도시의 소음에 지친 어느 날, 나는 짐을 쌌다.',
   '할아버지가 남겨 주신 시골집이 있는 작은 마을, \'초록마을\'로.',
-  '남은 건 낡은 집과 밭 하나뿐이지만… 이곳에서 다시 시작해 보려 한다.',
+  '남은 건 낡은 집과 밭뿐이지만… 이곳에서 다시 시작해 보려 한다.',
 ];
 
 export const TitleUI = {
@@ -19,15 +18,13 @@ export const TitleUI = {
     el.classList.remove('hidden');
     el.innerHTML = `
       <div class="title-card">
-        <div class="logo">🌱 FARMER</div>
+        <div class="logo"><small>🌱 초록마을</small>귀농일기</div>
         <div class="subtitle">도시에 지친 귀농인이 마을 이장이 되기까지</div>
-        <div class="genre">3D 힐링 농사 RPG</div>
         <div class="title-buttons">
           <button class="btn primary big" data-act="new">새 게임</button>
           <button class="btn big" data-act="continue" ${hasSave ? '' : 'disabled'}>이어하기</button>
           <button class="btn big" data-act="settings">설정</button>
         </div>
-        <div class="title-hint">WASD 이동 · 클릭 상호작용 · 1~${HOTBAR_SIZE} 핫바</div>
       </div>`;
     el.querySelector('[data-act="new"]').onclick = () => {
       AudioManager.resume();
@@ -102,7 +99,9 @@ export const TitleUI = {
     const el = $('title-screen');
     el.innerHTML = prologueComicHTML(OPENING);
     el.classList.add('comic-bg');
-    const cuts = [...el.querySelectorAll('.cut')];
+    // 컷마다 그림과 나레이션 상자가 따로 있어 data-cut 번호로 함께 보여 준다
+    const count = new Set([...el.querySelectorAll('[data-cut]')].map((n) => n.dataset.cut)).size;
+    const cuts = Array.from({ length: count }, (_, i) => [...el.querySelectorAll(`[data-cut="${i}"]`)]);
     let next = null;
     let skipAll = false;
     el.onclick = () => next?.();
@@ -114,7 +113,7 @@ export const TitleUI = {
     await wait(300);
     for (const cut of cuts) {
       if (skipAll) break;
-      cut.classList.add('show');
+      cut.forEach((n) => n.classList.add('show'));
       AudioManager.sfx('click');
       await new Promise((r) => { next = r; setTimeout(r, 4200); });
     }

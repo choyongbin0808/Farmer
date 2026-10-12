@@ -333,6 +333,79 @@ export function makeLadderUp(label) {
   return g;
 }
 
+/** 1층 직행 승강기: 나무 틀 · 위쪽 도르래와 밧줄 · 쇠창살 문 · 발판 (앞 = +z) */
+export function makeMineLift(label) {
+  const g = new THREE.Group();
+  const timber = surf('wood', 0x6e4e32);
+  const iron = surf('metal', 0x4a4644, { roughness: 0.5 });
+  // 발판 (널빤지)
+  const floor = mesh(box(2.2, 0.16, 2.2), surf('wood', 0x9a7048), true, true);
+  floor.position.y = 0.08;
+  g.add(floor);
+  for (let i = -2; i <= 2; i++) {
+    const seam = mesh(box(2.16, 0.01, 0.03, 0.005), mat(0x5a4030), false);
+    seam.position.set(0, 0.165, i * 0.42);
+    g.add(seam);
+  }
+  // 네 기둥 + 위쪽 들보
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const post = mesh(box(0.18, 3.6, 0.18), timber);
+    post.position.set(sx * 1.05, 1.8, sz * 1.05);
+    g.add(post);
+  }
+  for (const sz of [-1, 1]) {
+    const beam = mesh(box(2.5, 0.2, 0.22), timber);
+    beam.position.set(0, 3.6, sz * 1.05);
+    g.add(beam);
+  }
+  const cross = mesh(box(0.22, 0.2, 2.5), timber);
+  cross.position.set(0, 3.75, 0);
+  g.add(cross);
+  // 도르래 바퀴 + 밧줄
+  const wheel = mesh(new THREE.TorusGeometry(0.34, 0.06, 8, 22), iron);
+  wheel.position.set(0, 4.0, 0);
+  wheel.name = 'wheel';
+  const hub = mesh(cyl(0.08, 0.08, 0.14, 10), iron);
+  hub.rotation.x = Math.PI / 2;
+  hub.position.copy(wheel.position);
+  g.add(wheel, hub);
+  for (const sx of [-0.34, 0.34]) {
+    const rope = mesh(cyl(0.025, 0.025, 3.9, 6), mat(0xb89a68, { roughness: 1 }));
+    rope.position.set(sx, 2.05, 0);
+    g.add(rope);
+  }
+  // 옆 · 뒤 난간과 앞쪽 쇠창살 문(반쯤 열림)
+  for (const [w, d, x, z] of [[0.08, 2.0, -1.05, 0], [0.08, 2.0, 1.05, 0], [2.0, 0.08, 0, -1.05]]) {
+    for (const y of [0.6, 1.15]) {
+      const rail = mesh(box(w, 0.08, d, 0.02), timber);
+      rail.position.set(x, y, z);
+      g.add(rail);
+    }
+  }
+  for (let i = 0; i < 5; i++) {
+    const bar = mesh(cyl(0.022, 0.022, 1.3, 6), iron);
+    bar.position.set(0.45 + i * 0.13, 0.82, 1.08);
+    g.add(bar);
+  }
+  const gateTop = mesh(box(0.7, 0.05, 0.05, 0.01), iron);
+  gateTop.position.set(0.71, 1.48, 1.08);
+  g.add(gateTop);
+  // 레버 · 등불
+  const lever = mesh(cyl(0.03, 0.03, 0.6, 6), iron);
+  lever.position.set(-0.85, 1.0, 0.85);
+  lever.rotation.z = 0.5;
+  const knob = mesh(new THREE.SphereGeometry(0.06, 8, 6), mat(0xd8503e));
+  knob.position.set(-0.99, 1.26, 0.85);
+  g.add(lever, knob);
+  const lamp = mesh(new THREE.SphereGeometry(0.13, 12, 10), GLOW_MAT, false);
+  lamp.position.set(0, 3.4, 1.15);
+  g.add(lamp);
+  const sign = makeLabel(label, { scale: 0.8 });
+  sign.position.set(0, 4.7, 0);
+  g.add(sign);
+  return g;
+}
+
 /** 돌쇠의 곡괭이 좌판 */
 export function makePickStall() {
   const g = new THREE.Group();
@@ -479,20 +552,20 @@ export function makeBrewer() {
   handle.rotation.z = Math.PI / 2;
   handle.position.set(-0.8, 1.1, 0);
   g.add(hearth, fire, pot, rim, lid, knob, spout, handle);
-  // 작은 기와 지붕 (네 기둥)
-  const wood = surf('wood', 0x8a6444);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const post = mesh(box(0.12, 2.3, 0.12), wood);
-    post.position.set(sx * 1.05, 1.15, sz * 1.05);
-    g.add(post);
-  }
-  const roofM = surf('shingle', 0x8a5a4a);
+  // 지하 작업실 안이라 지붕 대신 구리 환기 후드 + 연통
+  const copper = surf('metal', 0xc8733a, { roughness: 0.35 });
+  const hood = mesh(new THREE.CylinderGeometry(0.22, 0.75, 0.45, 18, 1, true), copper);
+  hood.material.side = THREE.DoubleSide;
+  hood.position.y = 2.25;
+  const pipe = mesh(cyl(0.12, 0.12, 0.55, 12), copper);
+  pipe.position.y = 2.72;
   for (const sx of [-1, 1]) {
-    const slab = mesh(new THREE.BoxGeometry(1.6, 0.08, 2.7), roofM, true, true);
-    slab.rotation.z = -sx * 0.5;
-    slab.position.set(sx * 0.68, 2.62, 0);
-    g.add(slab);
+    const rod = mesh(cyl(0.015, 0.015, 0.7, 6), surf('metal', 0x5a4a3a));
+    rod.position.set(sx * 0.5, 2.0, 0);
+    rod.rotation.z = sx * 0.35;
+    g.add(rod);
   }
+  g.add(hood, pipe);
   // 김 (애니메이션)
   const steam = [];
   const steamM = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false, roughness: 1 });
@@ -503,7 +576,7 @@ export function makeBrewer() {
     steam.push(puff);
   }
   const label = makeLabel('약탕기', { scale: 0.8 });
-  label.position.y = 3.5;
+  label.position.y = 3.3;
   g.add(label);
   g.userData.anim = { steam, fire };
   return g;

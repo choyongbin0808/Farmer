@@ -2,6 +2,7 @@ import { G, BAG_AREAS } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { getItem } from '../data/items.js';
 import { StorageSystem } from './StorageSystem.js';
+import { SoilBoxSystem, SOIL_ID } from './SoilBoxSystem.js';
 
 /** 아이템 종류 → 가방 칸(탭). 목록에 없는 종류(재료·특별 아이템 등)는 '물품' */
 const AREA_OF_TYPE = {
@@ -198,14 +199,76 @@ export const InventorySystem = {
     return true;
   },
 
-  /** 인벤토리 + 창고 합계 (퀘스트 전달·판매용) */
-  countAll(id) {
-    return this.count(id) + StorageSystem.count(id);
+  /** 같은 아이템이면 한 칸으로 합칠 수 있는지 (물고기처럼 무게가 있는 건 따로) */
+  canMerge(a, b) {
+    return a && b && a !== b && a.id === b.id && a.w == null && b.w == null && b.n < (getItem(b.id).stack || 99);
   },
 
-  /** 들고 있는 것(인벤토리) 먼저, 부족한 만큼 창고에서 차감 */
+  /**
+   * 끌어다 놓기: from 칸 → to 칸. 같은 아이템이면 쌓고(넘치면 남김), 아니면 자리 교환.
+   * 들고 있던 칸(G.ui.held)도 따라 옮긴다. 못 옮기면 false
+   */
+  drag(fromArea, fi, toArea, ti) {
+    if (fromArea === toArea && fi === ti) return false;
+    const a = arr(fromArea), b = arr(toArea);
+    if (this.canMerge(a[fi], b[ti])) {
+      const k = Math.min(a[fi].n, (getItem(b[ti].id).stack || 99) - b[ti].n);
+      b[ti].n += k;
+      a[fi].n -= k;
+      if (a[fi].n <= 0) a[fi] = null;
+      this.followHeld(fromArea, fi, toArea, ti, !a[fi]);
+      EventBus.emit('inventory');
+      return true;
+    }
+    if (!this.swap(fromArea, fi, toArea, ti)) return false;
+    this.followHeld(fromArea, fi, toArea, ti, true);
+    return true;
+  },
+
+  /** 핫바 칸의 아이템을 제 종류의 가방 칸(탭)으로: 같은 아이템 칸에 먼저 쌓고, 남으면 빈칸에. 들어간 탭 이름, 자리가 없으면 null */
+  stow(area, index) {
+    const list = arr(area);
+    const s = list[index];
+    if (!s) return null;
+    const to = bagAreaOf(s.id);
+    const bag = arr(to);
+    for (let i = 0; i < bag.length && list[index]; i++) if (this.canMerge(list[index], bag[i])) this.drag(area, index, to, i);
+    if (list[index]) {
+      const j = bag.indexOf(null);
+      if (j < 0) {
+        EventBus.emit('inventory');
+        return null;
+      }
+      this.drag(area, index, to, j);
+    }
+    return to;
+  },
+
+  /**
+   * 가방에서 골라 들고 있던 아이템이 옮겨졌으면 따라간다 (moved: from 칸이 비었거나 교환됨).
+   * 핫바 번호로 고른 칸은 자리 그대로 (그 칸에 새로 들어온 아이템을 든다)
+   */
+  followHeld(fromArea, fi, toArea, ti, moved) {
+    const h = G.ui.held;
+    if (!h || !moved || h.area === 'hotbar') {
+      EventBus.emit('held');
+      return;
+    }
+    if (h.area === fromArea && h.index === fi) this.select(toArea, ti);
+    else if (h.area === toArea && h.index === ti) this.select(fromArea, fi);
+  },
+
+  /** 인벤토리 + 창고 합계 (퀘스트 전달·판매용) */
+  /** 가방 · 핫바 + 창고 (+ 일반 흙은 지하 흙 상자) 를 합친 개수 */
+  countAll(id) {
+    return this.count(id) + StorageSystem.count(id) + (id === SOIL_ID ? SoilBoxSystem.total() : 0);
+  },
+
+  /** 일반 흙은 지하 흙 상자 먼저, 그다음 들고 있는 것(인벤토리), 부족한 만큼 창고에서 차감 */
   consumeAll(id, n) {
-    const fromInv = this.remove(id, n);
-    if (fromInv < n) StorageSystem.remove(id, n - fromInv);
+    let left = n;
+    if (id === SOIL_ID) left -= SoilBoxSystem.take(left);
+    const fromInv = this.remove(id, left);
+    if (fromInv < left) StorageSystem.remove(id, left - fromInv);
   },
 };

@@ -4,9 +4,10 @@ import {
 } from '../data/mining.js';
 import { interactables, colliders, mineColliders, setZoneBounds } from './World.js';
 import { setWeatherIndoor } from './Weather.js';
+import { isRoom, roomBounds, roomLightSpots } from './Interiors.js';
 import {
   makeCaveShell, makeMineExit, makeMineLamp, makeSupportBeam, makePickStall, makeMinecart, makeOreNode, setOreNode,
-  makeLadderDown, makeLadderUp,
+  makeLadderDown, makeLadderUp, makeMineLift,
 } from './ExtraModels.js';
 import { makeRock } from './Models.js';
 
@@ -53,6 +54,12 @@ export function arrivalPos(f, cameFrom) {
   return toWorld(f, [x - 2.6, z + 1.2]);
 }
 
+/** 승강기 앞 자리 (월드) — 2층부터, 없으면 null */
+export function liftPos(f) {
+  const p = FLOOR_LAYOUT[f]?.lift;
+  return p ? toWorld(f, [p[0], p[1] + 1.9]) : null;
+}
+
 /** 광맥 모델 [층][자리] */
 export const mineNodes = Array.from({ length: MINE_FLOORS }, () => []);
 const lights = [];
@@ -87,6 +94,15 @@ function buildFloor(scene, f) {
     root.add(d);
     interactables.push(d);
     circle(L.down[0], L.down[1], 1.3);
+  }
+  if (L.lift) {
+    // 1층(입구) 직행 승강기
+    const lift = makeMineLift('🛗 승강기 · 1층(입구)으로');
+    lift.position.set(L.lift[0], 0, L.lift[1]);
+    lift.userData = { type: 'mineLift', floor: f };
+    root.add(lift);
+    interactables.push(lift);
+    colliders.push({ minX: o.x + L.lift[0] - 1.25, maxX: o.x + L.lift[0] + 1.25, minZ: o.z + L.lift[1] - 1.25, maxZ: o.z + L.lift[1] + 1.25 });
   }
   if (L.up) {
     const u = makeLadderUp(`⬆ ${f}층으로${f === 1 ? ' (입구)' : ''}`);
@@ -162,14 +178,16 @@ export function buildMine(scene) {
 const floorColliders = Array.from({ length: MINE_FLOORS }, () => []);
 
 /**
- * 층의 광맥을 상태대로 보여 준다 — ores: [{ id, x, z, ore }] (로컬 좌표).
+ * 층의 광맥을 상태대로 보여 준다 — ores: [{ id, slot, x, z, ore }] (로컬 좌표).
+ * 광맥마다 정해진 모델(slot)을 쓰므로, 하나를 캐도 나머지 광맥은 자리 · 모양이 그대로다.
  * 캐낸 광맥은 목록에서 빠지므로 아무것도 남지 않는다.
  */
 export function syncFloorOres(f, ores) {
   const o = originOf(f);
   const pool = mineNodes[f];
+  const bySlot = new Map(ores.map((e) => [e.slot, e]));
   pool.forEach((n, i) => {
-    const e = ores[i];
+    const e = bySlot.get(i);
     const wasIn = interactables.indexOf(n);
     if (!e) {
       n.visible = false;
@@ -186,18 +204,35 @@ export function syncFloorOres(f, ores) {
     }
     if (wasIn < 0) interactables.push(n);
   });
-  floorColliders[f] = ores.slice(0, pool.length).map((e) => ({ x: o.x + e.x, z: o.z + e.z, r: 0.75 }));
+  floorColliders[f] = ores.filter((e) => e.slot >= 0 && e.slot < pool.length).map((e) => ({ x: o.x + e.x, z: o.z + e.z, r: 0.75 }));
   mineColliders.length = 0;
   for (const list of floorColliders) mineColliders.push(...list);
 }
 
-/** 지금 있는 구역(과 광산 층)에 맞춰 이동 범위 · 날씨 · 광산 조명을 바꾼다 */
+/** 광산 등불 4개 — 집 · 마을회관 안에서도 옮겨 쓴다 (Interiors.updateInteriors 가 밝기를 조절) */
+export const zoneLights = lights;
+
+/** 지금 있는 구역(마을 · 광산 층 · 집 · 마을회관)에 맞춰 이동 범위 · 날씨 · 조명을 바꾼다 */
 export function applyZone(zone, floor = 0) {
   const mine = zone === 'mine';
-  setZoneBounds(mine ? floorBounds(floor) : null);
-  setWeatherIndoor(mine);
+  const room = isRoom(zone);
+  setZoneBounds(mine ? floorBounds(floor) : room ? roomBounds(zone) : null);
+  setWeatherIndoor(mine || room);
+  if (room) {
+    const spots = roomLightSpots(zone);
+    lights.forEach((l, i) => {
+      const s = spots[i];
+      l.color.setHex(s?.color ?? 0xffb868);
+      l.distance = 16;
+      l.intensity = s ? s.power : 0;
+      if (s) l.position.set(s.x, s.y, s.z);
+    });
+    return;
+  }
   const o = originOf(floor);
   lights.forEach((l, i) => {
+    l.color.setHex(0xffb868);
+    l.distance = 26;
     l.intensity = mine ? 30 : 0;
     l.position.set(o.x + LIGHT_SPOTS[i][0], 3.6, o.z + LIGHT_SPOTS[i][1]);
   });

@@ -1,8 +1,8 @@
-import { G, absMinutes } from '../core/Game.js';
+import { G, absMinutes, GAME_MIN_PER_SEC } from '../core/Game.js';
 import { EventBus } from '../core/EventBus.js';
 import { AudioManager } from '../core/AudioManager.js';
 import { saveGame } from '../core/SaveManager.js';
-import { ORES, ORE_ORDER, PICKAXES, PICK_BY_ID, MINE_FLOORS, MAX_ORES, REGEN_MIN, randomOreSpot, rollOre, rollOreAmount } from '../data/mining.js';
+import { ORES, ORE_ORDER, PICKAXES, PICK_BY_ID, MINE_FLOORS, MAX_ORES, RESET_MIN, FLOOR_LAYOUT, randomOreSpot, rollOre, rollOreAmount } from '../data/mining.js';
 import { InventorySystem } from './InventorySystem.js';
 import { StaminaSystem } from './StaminaSystem.js';
 import { MINE_DOOR } from '../world/World.js';
@@ -22,7 +22,8 @@ import { toast, fade } from '../ui/HUD.js';
 /**
  * 광산: 광맥을 곡괭이로 캐서 광석을 얻고, 한 반장에게 판다.
  * - 광맥은 정해진 자리 없이 층 안 빈 땅에 랜덤으로 생기고, 캐면 아무것도 남지 않는다.
- * - 게임 시간이 흐르면 층마다 조금씩 다시 생긴다 (밖에 있거나 자는 동안에도 흐른 시간만큼, 한 번에 가득 차지 않음).
+ * - 캔 광맥은 사라진 채로 있다가, 일정 시간(RESET_MIN)마다 광산 전체가 초기화되어 모든 층의 빈 자리가 다시 채워진다 (아래층에 있으면 1층으로)
+ *   (밖에 있거나 자는 동안에도 시간은 흐른다).
  * - 단단한 광석은 곡괭이 등급이 모자라면 못 캔다. 좋은 곡괭이일수록 빠르고, 광석이 여러 개 나올 확률이 높다.
  * - 한 번 캘 때마다 체력이 조금 든다 (농사와 같은 체력을 나눠 쓰므로 농사보다 벌이가 많을 수 없다).
  */
@@ -37,17 +38,42 @@ export const MiningSystem = {
   },
 
   /**
-   * 층 상태 { ores: [{ id, x, z, ore }], last: 마지막 생성 시각(게임 분), seq }
+   * 층 상태 { ores: [{ id, slot, x, z, ore }], seq }
+   * slot: 화면의 광맥 모델 번호 — 하나를 캐도 나머지 광맥 모델이 자리를 옮기지 않도록 고정
    * 처음이거나 예전 형식(정해진 자리)이면 광맥을 가득 채워 시작한다
+   * 광산 전체 초기화 시각은 state.mine.resetAt (게임 분)
    */
   floorState(f = this.floor()) {
     const m = G.state.mine;
     if (!Array.isArray(m.floors) || m.floors.length !== MINE_FLOORS || !Array.isArray(m.floors[0]?.ores)) {
-      m.floors = Array.from({ length: MINE_FLOORS }, () => ({ ores: [], last: absMinutes(), seq: 0 }));
+      m.floors = Array.from({ length: MINE_FLOORS }, () => ({ ores: [], seq: 0 }));
       delete m.nodes;
       for (let i = 0; i < MINE_FLOORS; i++) this.spawn(i, MAX_ORES);
     }
-    return m.floors[f];
+    const st = m.floors[f];
+    // 예전 세이브: 모델 번호를 붙이고, 층마다 따로 돌던 타이머는 광산 전체 타이머로 합친다
+    if (!st.migrated) {
+      st.migrated = true;
+      const used = new Set();
+      for (const o of st.ores) {
+        if (!Number.isInteger(o.slot) || used.has(o.slot)) o.slot = this.freeSlot(st, used);
+        used.add(o.slot);
+      }
+      delete st.last;
+    }
+    delete st.resetAt;
+    // 승강기가 새로 생긴 자리에 예전 광맥이 있으면 치운다 (빈 자리는 다음 재생성 때 다른 곳에)
+    if (!st.liftClear) {
+      st.liftClear = true;
+      const L = FLOOR_LAYOUT[f]?.lift;
+      if (L) st.ores = st.ores.filter((o) => Math.hypot(o.x - L[0], o.z - L[1]) >= 3.2);
+    }
+    return st;
+  },
+
+  freeSlot(st, used = new Set(st.ores.map((o) => o.slot))) {
+    for (let i = 0; i < MAX_ORES; i++) if (!used.has(i)) return i;
+    return -1;
   },
 
   /** 광맥 n개를 빈자리에 새로 만든다 (플레이어 바로 옆은 피한다) */
@@ -58,59 +84,75 @@ export const MiningSystem = {
     let made = 0;
     for (let k = 0; k < n && st.ores.length < MAX_ORES; k++) {
       const spot = randomOreSpot(f, st.ores, avoid);
-      if (!spot) break;
-      st.ores.push({ id: ++st.seq, ...spot, ore: rollOre(f) });
+      const slot = this.freeSlot(st);
+      if (!spot || slot < 0) break;
+      st.ores.push({ id: ++st.seq, slot, ...spot, ore: rollOre(f) });
       made++;
     }
     return made;
   },
 
-  /** 흐른 시간만큼 광맥이 조금씩 다시 생긴다 (REGEN_MIN 분마다 하나, 최대 MAX_ORES) */
-  regen(f, now = absMinutes()) {
-    const st = this.floorState(f);
-    const due = Math.floor((now - st.last) / REGEN_MIN);
-    if (due <= 0) return 0;
-    st.last += due * REGEN_MIN;
-    if (st.ores.length >= MAX_ORES) {
-      st.last = now;
-      return 0;
-    }
-    return this.spawn(f, due);
-  },
-
-  /** 흐른 시간만큼 다시 생기게 한 뒤 모든 층의 광맥을 화면에 맞춘다 (불러오기 · 드나들 때) */
-  refreshVisuals() {
+  /**
+   * 광산 전체 초기화: RESET_MIN 분마다 모든 층의 빈 자리를 한꺼번에 다시 채운다.
+   * 초기화 시각이 지났으면 초기화하고 true (다음 초기화 시각은 지금부터 다시 RESET_MIN 뒤)
+   */
+  checkReset(now = absMinutes()) {
+    const m = G.state.mine;
+    this.floorState(0);
+    if (typeof m.resetAt !== 'number') m.resetAt = now + RESET_MIN;
+    if (now < m.resetAt) return false;
     for (let f = 0; f < MINE_FLOORS; f++) {
-      this.regen(f);
-      syncFloorOres(f, this.floorState(f).ores);
+      const st = this.floorState(f);
+      this.spawn(f, MAX_ORES - st.ores.length);
     }
+    m.resetAt = now + RESET_MIN;
+    return true;
   },
 
-  /** 새 날: 자는 동안 흐른 시간만큼 다시 생긴다 (한 번에 가득 차지 않는다) */
+  /** 광산 전체가 다시 초기화되기까지 남은 실제 시간(초) */
+  resetLeftSeconds() {
+    const m = G.state.mine;
+    if (typeof m.resetAt !== 'number') return Math.ceil(RESET_MIN / GAME_MIN_PER_SEC);
+    return Math.max(0, Math.ceil((m.resetAt - absMinutes()) / GAME_MIN_PER_SEC));
+  },
+
+  /** 흐른 시간만큼 초기화를 반영한 뒤 모든 층의 광맥을 화면에 맞춘다 (불러오기 · 드나들 때 · 자고 일어날 때) */
+  refreshVisuals() {
+    this.checkReset();
+    for (let f = 0; f < MINE_FLOORS; f++) syncFloorOres(f, this.floorState(f).ores);
+  },
+
+  /** 새 날: 자는 동안 초기화 시각이 지났으면 가득 차 있다 */
   newDay() {
     this.refreshVisuals();
   },
 
-  /** 캐낸 자리 다시 채우기 (1초마다) */
+  /** 광산 안에서 1초마다: 초기화 시각이 되면 모든 층을 다시 채우고, 아래층(2~4층)에 있으면 1층 입구로 돌려보낸다 */
   update(dt) {
-    // 곡괭이로 내리찍는 순간마다 '깡' 소리
-    const w = G.refs.player.work;
-    if (w?.motion === 'mine') {
-      const k = Math.floor((w.t / w.dur) * w.cycles + 0.4);
-      if (k !== this.lastSwing) {
-        this.lastSwing = k;
-        if (k > 0) AudioManager.sfx('pick');
-      }
-    } else {
-      this.lastSwing = -1;
-    }
+    // 곡괭이 '깡' 소리는 AudioManager.updateWork 가 동작 박자에 맞춰 낸다
     this.respawnTimer -= dt;
     if (this.respawnTimer > 0) return;
     this.respawnTimer = 1;
-    const now = absMinutes();
-    for (let f = 0; f < MINE_FLOORS; f++) {
-      if (this.regen(f, now)) syncFloorOres(f, this.floorState(f).ores);
+    if (this.busy || !this.checkReset()) return;
+    for (let f = 0; f < MINE_FLOORS; f++) syncFloorOres(f, this.floorState(f).ores);
+    if (this.floor() > 0) this.kickToEntrance();
+    else {
+      AudioManager.sfx('chime');
+      toast('🔄 광산이 초기화됐어요! 광맥이 다시 가득 생겼어요', 'good');
     }
+  },
+
+  /** 초기화 때 아래층에 있으면 1층 입구로 */
+  async kickToEntrance() {
+    const from = this.floor();
+    this.busy = true;
+    G.refs.player.work = null;
+    AudioManager.sfx('lift');
+    await fade(true);
+    this.moveTo('mine', MINE_SPAWN, Math.PI / 2, 0);
+    await fade(false);
+    this.busy = false;
+    toast(`🔄 광산이 초기화됐어요! ${from + 1}층에서 1층(입구)으로 돌아왔어요 · 광맥이 다시 가득해요`, 'good');
   },
 
   // ─── 드나들기 ───
@@ -154,6 +196,19 @@ export const MiningSystem = {
     await fade(false);
     this.busy = false;
     toast(`⛏️ 광산 ${to + 1}층${to === 0 ? ' (입구)' : ''}${FLOOR_TIPS[to]}`);
+  },
+
+  /** 승강기: 2층 이하 어디서든 바로 1층(입구)으로 */
+  async takeLift() {
+    if (this.busy || this.floor() === 0) return;
+    this.busy = true;
+    const from = this.floor();
+    AudioManager.sfx('lift');
+    await fade(true);
+    this.moveTo('mine', MINE_SPAWN, Math.PI / 2, 0);
+    await fade(false);
+    this.busy = false;
+    toast(`🛗 승강기를 타고 ${from + 1}층에서 1층(입구)으로 올라왔어요`, 'good');
   },
 
   /** 플레이어를 구역(과 광산 층)으로 옮긴다 (잠들 때·불러올 때도 사용) */

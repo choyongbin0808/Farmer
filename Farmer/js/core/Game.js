@@ -4,9 +4,9 @@ export const MONEY_CHEAT = 1_000_000_000;
 export const SAVE_VERSION = 2;
 export const RESIDENTS = ['grandma', 'minji', 'sua', 'fisher', 'smith'];
 export const DAY_START = 6 * 60;
-export const DAY_END = 26 * 60; // 다음 날 02:00
 export const SLEEP_START = 18 * 60; // 이 시각(밤)부터 잠자기 가능
-export const GAME_MIN_PER_SEC = 2;
+// 실제 1초 = 게임 5분 (예전 2분의 2.5배) → 하루(06~18시) 2분 24초, 자지 않으면 다음 날 06시까지 4분 48초
+export const GAME_MIN_PER_SEC = 5;
 /**
  * 가방 칸: 탭(종류)마다 따로 — seed 씨앗·모종, crop 작물, food 음식, misc 물품(재료·특별 아이템),
  * mining 채광(곡괭이·광석), fishing 낚시(낚싯대·물고기·게), facility 시설(약탕기·육묘장)
@@ -40,8 +40,9 @@ export const G = {
   settings: { bgm: 0.5, sfx: 0.7 },
 };
 
+/** grown: 자란 양(게임 분) — 물 준 날 시간이 흐르는 만큼 쌓이고, 작물의 성장 시간에 닿으면 다 자람 */
 export function newPlot() {
-  return { state: 'empty', cropId: null, seedling: false, daysGrown: 0, watered: false, plantedDay: 0 };
+  return { state: 'empty', cropId: null, seedling: false, grown: 0, watered: false, plantedDay: 0 };
 }
 
 export function createNewState(name) {
@@ -65,7 +66,6 @@ export function createNewState(name) {
       enhance: {},
     },
     quests: { mainIndex: 0, main: null, subs: {}, tracked: null },
-    relations: { grandma: 0, minji: 0, sua: 0, fisher: 0, smith: 0 },
     talkedToday: {},
     rank: 0,
     // harvested: 작물별 누적 수확 수 (도감)
@@ -74,12 +74,16 @@ export function createNewState(name) {
       endingSeen: false, introDone: false, watermelon: false, tea: false, discount: false,
       deco_drawing: false, deco_rod: false,
       mine: false, gotPickaxe: false, hallFunded: false, hallBuilt: false,
+      // 처음 들어가 본 건물 (첫 안내 한 번만)
+      visitedHouse: false, visitedHall: false, visitedCellar: false,
     },
     // 낚시: 종류별 최고 무게 · 종류별 잡은 수(도감), 전체 잡은 수 (잡은 고기는 가방 '낚시' 칸에 { id, n: 1, w } 로 담긴다)
     fishing: { best: {}, counts: {}, caught: 0 },
     // 광산: 층마다 광맥 자리 [{ ore, respawnAt }] (null = 아직 만들지 않음), 광석별 캔 수(도감)
     mine: { floors: null, mined: {} },
-    // 배치한 시설: { kind, x, z, rot, job: { out, n, doneAt } | null } (배치 전 시설은 가방 '시설' 칸의 아이템)
+    // 지하 작업실 일반 흙 상자 3개 (상자마다 50개까지, 상점에서 산 일반 흙이 바로 들어감)
+    soilBoxes: [0, 0, 0],
+    // 지하 작업실 시설: { kind, slot, x, z, rot, job: { out, n, start, doneAt } | null }
     facilities: [],
   };
 }
@@ -92,7 +96,7 @@ export function isUIBlocking() {
   return !!G.ui.modal || G.ui.dialogue || G.ui.fading || G.mode !== 'play';
 }
 
-/** 지금 플레이어가 있는 곳: 'village' | 'mine' */
+/** 지금 플레이어가 있는 곳: 'village' | 'mine' | 'house'(우리 집 안) | 'hall'(마을회관 안) */
 export function currentZone() {
   return G.state?.player.zone ?? 'village';
 }

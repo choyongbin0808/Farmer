@@ -7,6 +7,7 @@ import { CLOTHES } from '../data/clothes.js';
 import { getItem } from '../data/items.js';
 import { GEAR, GEAR_ORDER } from '../data/tools.js';
 import { InventorySystem } from './InventorySystem.js';
+import { SoilBoxSystem, SOIL_ID } from './SoilBoxSystem.js';
 import { OutfitSystem } from './OutfitSystem.js';
 import { GearSystem } from './GearSystem.js';
 import { toast } from '../ui/HUD.js';
@@ -33,16 +34,34 @@ export const ShopSystem = {
 
   maxAffordable(itemId) {
     const it = getItem(itemId);
-    return Math.max(0, Math.min(99, Math.floor(G.state.player.money / it.price)));
+    const cap = itemId === SOIL_ID ? SoilBoxSystem.free() : 99;
+    return Math.max(0, Math.min(cap, Math.floor(G.state.player.money / it.price)));
   },
 
   buy(itemId, n) {
     const it = getItem(itemId);
+    if (itemId === SOIL_ID && SoilBoxSystem.free() <= 0) {
+      AudioManager.sfx('error');
+      return toast('📦 지하 흙 상자가 가득 찼어요 (150/150)', 'warn');
+    }
     if (n <= 0) return toast('돈이 부족해요', 'warn');
     const price = it.price * n;
     if (G.state.player.money < price) {
       AudioManager.sfx('error');
       return toast('돈이 부족해요', 'warn');
+    }
+    // 일반 흙은 가방 대신 지하 작업실의 흙 상자로 바로
+    if (itemId === SOIL_ID) {
+      if (SoilBoxSystem.free() < n) {
+        AudioManager.sfx('error');
+        return toast(`📦 흙 상자에 ${SoilBoxSystem.free()}개만 더 들어가요`, 'warn');
+      }
+      G.state.player.money -= price;
+      SoilBoxSystem.add(n);
+      AudioManager.sfx('coin');
+      toast(`🪣 일반 흙 ${n}개 → 지하 흙 상자로 (${SoilBoxSystem.total()}/${SoilBoxSystem.capacity()}) · -${price.toLocaleString()}원`, 'good');
+      EventBus.emit('money');
+      return;
     }
     if (!InventorySystem.canAdd(itemId, n)) {
       AudioManager.sfx('error');
@@ -66,7 +85,7 @@ export const ShopSystem = {
     G.state.player.money -= c.price;
     OutfitSystem.addClothes(id);
     AudioManager.sfx('coin');
-    toast(`${c.icon} ${c.name}을(를) 샀어요! 가방의 '옷' 탭에서 입을 수 있어요`, 'good');
+    toast(`${c.icon} ${c.name}을(를) 샀어요! 우리 집 옷장에서 입을 수 있어요`, 'good');
     EventBus.emit('money');
   },
 

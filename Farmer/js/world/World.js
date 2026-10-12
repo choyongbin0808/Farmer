@@ -44,6 +44,13 @@ export const MINE_DOOR = { x: 27.2, z: 13 };
 export const facilityColliders = [];
 // 광산 광맥의 충돌체 (광맥이 생기고 없어질 때마다 Mine.js 가 다시 만든다)
 export const mineColliders = [];
+// 집 · 마을회관 안 가구의 충돌체 (장식이 바뀔 때마다 Interiors.js 가 다시 만든다)
+export const roomColliders = [];
+// 퀘스트 진행으로 장식이 바뀔 때 함께 불러 줄 함수들 (건물 내부 등)
+const decorHooks = [];
+export function addDecorHook(fn) {
+  decorHooks.push(fn);
+}
 
 // 지금 구역의 이동 범위 (마을 / 광산)
 const VILLAGE_BOUNDS = { minX: -BOUNDS, maxX: BOUNDS, minZ: -BOUNDS, maxZ: BOUNDS };
@@ -578,6 +585,7 @@ export function updateDecorations(flags) {
   if (deco.rod) deco.rod.visible = !!flags.deco_rod;
   if (deco.scaffold) deco.scaffold.visible = !!flags.hallFunded && !flags.hallBuilt;
   setHallUpgraded(!!flags.hallBuilt);
+  for (const fn of decorHooks) fn(flags);
 }
 
 /** 마을회관을 새 건물로 (또는 예전 건물로 — 새 게임을 시작할 때) 바꿔 끼운다 */
@@ -739,7 +747,7 @@ export function placementBlocked(rect, { ignore = null, keepClear = [] } = {}) {
 export function resolveCollision(pos, radius = 0.4) {
   pos.x = THREE.MathUtils.clamp(pos.x, zoneBounds.minX, zoneBounds.maxX);
   pos.z = THREE.MathUtils.clamp(pos.z, zoneBounds.minZ, zoneBounds.maxZ);
-  for (const list of [colliders, fenceColliders, facilityColliders, mineColliders]) for (const c of list) {
+  for (const list of [colliders, fenceColliders, facilityColliders, mineColliders, roomColliders]) for (const c of list) {
     if ('r' in c) {
       const dx = pos.x - c.x, dz = pos.z - c.z;
       const d = Math.hypot(dx, dz);

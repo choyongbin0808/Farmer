@@ -247,6 +247,14 @@
 .inv-grid { display: grid; grid-template-columns: repeat(auto-fill, 62px); gap: 8px; justify-content: start; }
 .inv-right .inv-grid .slot:not(.selected):not(.empty-cell) { background: #fbf0d8; border-color: #c9a273; }
 .inv-hotbar-label { font-family: var(--font-title); font-size: 14px; color: var(--text-dim); }
+.inv-hotbar-label b { font-weight: normal; color: var(--text); }
+/* 끌어다 놓기 */
+.inv-wrap .slot[data-area] { touch-action: none; user-select: none; }
+.slot.drag-src { opacity: 0.35; }
+.slot.drop-hover { border-color: var(--green-light); box-shadow: 0 0 0 3px rgba(90, 166, 60, 0.35); background: #effae6; }
+.inv-grid.drop-hover { outline: 3px dashed rgba(90, 166, 60, 0.6); outline-offset: 4px; border-radius: 10px; }
+.slot.drag-ghost { position: fixed; left: 0; top: 0; z-index: 10000; pointer-events: none; width: 62px; height: 62px; opacity: 0.92; box-shadow: 0 10px 22px rgba(80, 55, 30, 0.35); transform-origin: center; transition: none; will-change: transform; }
+body.inv-dragging, body.inv-dragging * { cursor: grabbing !important; }
 .inv-hotbar { display: flex; gap: 8px; padding: 8px; border-radius: 18px; background: var(--well); width: max-content; }
 
 .detail { padding: 10px 12px; min-height: 74px; font-size: 14px; }
@@ -391,6 +399,21 @@
 .ci-bar { height: 14px; margin-top: 12px; border-radius: 999px; background: var(--well); overflow: hidden; }
 .ci-bar div { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #a6e27a, var(--green)); transition: width 0.4s; }
 .ci-bar-label { font-size: 13px; color: var(--text-dim); text-align: right; margin-top: 3px; }
+/* 작물 정보: 성장 촉진제 · 갈아엎기 버튼 */
+.ci-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.ci-act { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; border: 2px solid var(--line-strong); background: var(--bg-inset); color: var(--text); font-family: var(--font-body); text-align: left; cursor: pointer; transition: transform 0.12s, background 0.12s, border-color 0.12s; }
+.ci-act:hover:not(:disabled) { transform: translateY(-2px); }
+.ci-act:disabled { opacity: 0.5; cursor: default; }
+.ci-act-ico { flex: none; width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); }
+.ci-act-ico .gear-svg { width: 36px; height: 36px; }
+.ci-act-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ci-act-txt b { font-size: 15px; font-weight: normal; }
+.ci-act-txt small { font-size: 12px; color: var(--text-dim); }
+.ci-act.boost:not(:disabled) { border-color: #e7a37f; background: #fff3ea; }
+.ci-act.boost:not(:disabled):hover { background: #ffe6d5; }
+.ci-act.plow:hover { background: #f6ead5; }
+.ci-act.plow.confirm { border-color: var(--red); background: #ffe9e5; }
+.ci-act.plow.confirm b { color: #c8453a; }
 .ci-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .ci-grid > div { padding: 8px 10px; font-size: 14px; }
 .ci-grid > div:first-child, .ci-grid > div:nth-child(2) { grid-column: 1 / -1; }
@@ -671,3 +694,49 @@
 .credits { font-size: 14px; color: var(--text-dim); margin-bottom: 10px; line-height: 1.6; }
 .end-note { font-size: 14px; margin-bottom: 14px; padding: 8px 12px; border-radius: 14px; background: #eef9e2; color: var(--green-dark); }
 .ending-card h1 { line-height: 1.2; }
+
+/* ───── 명예의 전당 (마을회관 진열장) ───── */
+.records { display: flex; flex-direction: column; gap: 10px; }
+.records h4 { margin: 6px 0 0; font-family: var(--font-title); font-weight: normal; font-size: 17px; color: var(--text); }
+.rec-name { text-align: center; font-family: var(--font-title); font-size: 20px; color: var(--text); padding: 8px; background: var(--gold-soft); border-radius: 14px; }
+.rec-name b { font-weight: normal; color: #c0601e; font-size: 24px; }
+.rec-name small { display: block; font-size: 13px; color: var(--text-dim); }
+.rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rec-grid div, .rec-hearts div { display: flex; justify-content: space-between; gap: 8px; padding: 7px 12px; background: var(--bg-inset); border: 1px solid var(--line); border-radius: 10px; font-size: 14px; }
+.rec-grid span, .rec-hearts span { color: var(--text-dim); }
+.rec-grid b, .rec-hearts b { font-weight: normal; color: var(--text); text-align: right; }
+.rec-book div { display: grid; grid-template-columns: 80px 1fr 60px; align-items: center; gap: 8px; font-size: 14px; margin: 4px 0; }
+.rec-book i { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--green) var(--p), var(--well) var(--p)); }
+.rec-book b { font-weight: normal; text-align: right; }
+.rec-hearts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+/* ───── 우리 집 옷장 ───── */
+.wr-wrap .wr-stage { height: 250px; flex: none; }
+.wr-worn-list { display: flex; flex-direction: column; gap: 6px; }
+.wr-worn { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: #fffaf0; border: 2px solid #c9a273; border-radius: 12px; }
+.wr-worn.empty { border-style: dashed; opacity: 0.8; }
+.wr-worn .ico { font-size: 26px; width: 32px; text-align: center; }
+.wr-worn div { flex: 1; display: flex; flex-direction: column; line-height: 1.25; }
+.wr-worn small { color: var(--text-dim); font-size: 11px; }
+.wr-worn b { font-weight: normal; font-size: 14px; }
+.wr-grid { height: 300px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; align-content: start; padding: 2px; }
+.wr-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px 8px; background: #fffaf0; border: 2px solid #e2cfa6; border-radius: 14px; cursor: pointer; font-family: inherit; color: var(--text); transition: transform 0.08s; }
+.wr-card:hover { transform: translateY(-2px); border-color: var(--gold); }
+.wr-card.sel { border-color: var(--green-dark); box-shadow: 0 0 0 3px #cfeebb; }
+.wr-card.worn { background: var(--gold-soft); }
+.wr-card .ico { font-size: 34px; line-height: 1.1; }
+.wr-card b { font-weight: normal; font-size: 14px; text-align: center; }
+.wr-card small { font-size: 11px; color: var(--text-dim); }
+.wr-card small.set { color: #8a5a2e; }
+.wr-card .worn-badge { position: absolute; top: 4px; right: 6px; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--green); color: #fff; }
+.eq-slot.cloth-view { cursor: help; }
+
+/* ───── 지하 일반 흙 상자 ───── */
+.soil-boxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 12px 0; }
+.soil-box { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px; background: var(--bg-inset); border: 2px solid var(--line); border-radius: 16px; }
+.soil-box.full { border-color: var(--gold); background: var(--gold-soft); }
+.soil-box b { font-family: var(--font-title); font-weight: normal; font-size: 16px; color: var(--text); }
+.soil-box small { color: var(--text-dim); font-size: 13px; }
+.sb-crate { position: relative; width: 96px; height: 76px; border: 6px solid #b08250; border-top: 0; border-radius: 0 0 10px 10px; background: #e8d4b0; overflow: hidden; box-shadow: inset 0 0 0 2px #8a6040; }
+.sb-crate i { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(#9a6a44, #6a4428); border-radius: 30px 30px 0 0 / 8px 8px 0 0; transition: height 0.3s; }
+.mat small.where { font-size: 11px; color: #8a6a4a; }
